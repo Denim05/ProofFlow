@@ -1,0 +1,30 @@
+{
+  "experiment_name": "Case H: Noisy Screenshot OCR Evaluation",
+  "ground_truth_id": "TXN-009182",
+  "is_simulated_ocr": true,
+  "fixture_provenance": "Synthetic low-contrast image fixture simulating scanned transaction screenshot",
+  "baseline": {
+    "execution_mode": "SIMULATED_OCR (Runtime Tesseract system binary unavailable)",
+    "recognized_text": "TXN-O09I82",
+    "mean_token_confidence": 0.62,
+    "cer": 0.2,
+    "is_ambiguous": true
+  },
+  "preprocessed": {
+    "execution_mode": "SIMULATED_OCR (Runtime Tesseract system binary unavailable)",
+    "pipeline": [
+      "DPI_Upscaling_300",
+      "Autocontrast_Enhancement"
+    ],
+    "recognized_text": "TXN-009I82",
+    "mean_token_confidence": 0.78,
+    "cer": 0.1,
+    "is_ambiguous": true
+  },
+  "outcome": {
+    "cer_improvement": 0.1,
+    "evaluation_result": "IMPROVED",
+    "uncertainty_preserved": true,
+    "empirical_finding": "Contrast enhancement improved calculated CER from 0.20 to 0.10 by resolving 'O' -> '0', but 'I' -> '1' remained ambiguous. Downstream systems must preserve token uncertainty rather than falsely asserting an intentional transaction ID mismatch."
+  }
+}

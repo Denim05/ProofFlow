@@ -1,0 +1,9 @@
+# ProofFlow ML Track 2 Dependencies
+# Evidence Extraction Foundation
+
+pymupdf>=1.24.0
+pillow>=10.0.0
+pytesseract>=0.3.10
+
+# Optional Candidate OCR (PaddleOCR requires separate installation when GPU/specific platform wheels are needed)
+# paddleocr>=2.7.0
