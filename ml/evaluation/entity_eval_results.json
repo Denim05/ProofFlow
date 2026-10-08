@@ -1,0 +1,49 @@
+{
+  "evaluation_name": "ProofFlow ML Track 3 Entity Extraction Benchmark",
+  "sample_count": 5,
+  "total_gold_entities": 23,
+  "total_extracted_entities": 23,
+  "true_positives": 23,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "safety_checks": {
+    "monetary_uses_exact_decimal": true,
+    "case_h_evaluated": true,
+    "case_h_ambiguity_preserved": true,
+    "ambiguous_date_preserved": true,
+    "unanchored_phone_preserves_unknown_country": true
+  },
+  "document_results": [
+    {
+      "document_id": "eval_doc_01_invoice",
+      "gold_count": 7,
+      "extracted_count": 7,
+      "true_positives": 7
+    },
+    {
+      "document_id": "eval_doc_02_bank_stmt",
+      "gold_count": 6,
+      "extracted_count": 6,
+      "true_positives": 6
+    },
+    {
+      "document_id": "eval_doc_03_chat_log",
+      "gold_count": 5,
+      "extracted_count": 5,
+      "true_positives": 5
+    },
+    {
+      "document_id": "eval_doc_04_unanchored_phone",
+      "gold_count": 3,
+      "extracted_count": 3,
+      "true_positives": 3
+    },
+    {
+      "document_id": "eval_doc_05_case_h_noisy_ocr",
+      "gold_count": 2,
+      "extracted_count": 2,
+      "true_positives": 2
+    }
+  ]
+}
