@@ -1,0 +1,118 @@
+[
+  {
+    "case_id": "case_syn_001_consistent",
+    "case_name": "Case A: Consistent Purchase & Refund Flow",
+    "is_synthetic": true,
+    "description": "Standard canonical refund: ₹10,000 order paid, delivered, returned, and refunded with full matching bank credit.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_01_inv", "filename": "invoice_1001.pdf", "type": "PDF", "amount": 10000.0, "currency": "INR", "date": "2026-10-01" },
+      { "evidence_id": "evi_syn_01_pay", "filename": "payment_receipt.pdf", "type": "RECEIPT", "amount": 10000.0, "currency": "INR", "date": "2026-10-01" },
+      { "evidence_id": "evi_syn_01_bank", "filename": "bank_statement.pdf", "type": "BANK_STATEMENT", "refund_amount": 10000.0, "currency": "INR", "date": "2026-10-07" }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 0,
+      "coverage_status": "PRESENT_IN_UPLOADED_EVIDENCE"
+    }
+  },
+  {
+    "case_id": "case_syn_002_amount_mismatch",
+    "case_name": "Case B: Monetary Amount Mismatch",
+    "is_synthetic": true,
+    "description": "Invoice totals ₹10,000 while charged payment receipt totals ₹12,000.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_02_inv", "filename": "order_invoice.pdf", "type": "PDF", "amount": 10000.0, "currency": "INR", "date": "2026-10-01" },
+      { "evidence_id": "evi_syn_02_pay", "filename": "card_charge_slip.pdf", "type": "RECEIPT", "amount": 12000.0, "currency": "INR", "date": "2026-10-01" }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 1,
+      "inconsistency_type": "AMOUNT_MISMATCH",
+      "expected_difference": 2000.0
+    }
+  },
+  {
+    "case_id": "case_syn_003_date_inconsistency",
+    "case_name": "Case C: Temporal Sequence Inconsistency",
+    "is_synthetic": true,
+    "description": "Carrier tracking marks item delivered on Oct 01, while shipping dispatch confirmation is dated Oct 04.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_03_deliv", "filename": "carrier_pod.pdf", "type": "CARRIER_POD", "event": "ORDER_DELIVERED", "date": "2026-10-01T10:00:00Z" },
+      { "evidence_id": "evi_syn_03_ship", "filename": "merchant_dispatch.pdf", "type": "EMAIL", "event": "ORDER_SHIPPED", "date": "2026-10-04T15:30:00Z" }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 1,
+      "inconsistency_type": "TEMPORAL_SEQUENCE_VIOLATION"
+    }
+  },
+  {
+    "case_id": "case_syn_004_missing_refund_record",
+    "case_name": "Case D: Refund Claimed Without Supporting Record",
+    "is_synthetic": true,
+    "description": "Merchant chat claims full refund was processed, but uploaded bank statement spanning Oct 1-15 contains no credit.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_04_chat", "filename": "merchant_whatsapp.png", "type": "WHATSAPP_CHAT", "claim": "Refund issued yesterday" },
+      { "evidence_id": "evi_syn_04_bank", "filename": "full_oct_statement.pdf", "type": "BANK_STATEMENT", "date_range": ["2026-10-01", "2026-10-15"] }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 1,
+      "finding_type": "MISSING_EVIDENCE_ADVISORY",
+      "coverage_state": "NOT_FOUND_IN_UPLOADED_EVIDENCE"
+    }
+  },
+  {
+    "case_id": "case_syn_005_temporally_compatible",
+    "case_name": "Case E: Contextually Compatible Claims",
+    "is_synthetic": true,
+    "description": "Carrier POD photo shows parcel sealed upon delivery (14:00); customer message at 14:30 shows opened empty box.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_05_pod", "filename": "carrier_scan.jpg", "type": "IMAGE", "statement": "Delivered intact parcel at 14:00" },
+      { "evidence_id": "evi_syn_05_chat", "filename": "customer_photo.jpg", "type": "IMAGE", "statement": "Opened parcel at 14:30, contents missing" }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 0,
+      "conflict_state": "CONTEXTUALLY_COMPATIBLE"
+    }
+  },
+  {
+    "case_id": "case_syn_006_insufficient_coverage",
+    "case_name": "Case F: Incomplete Date Range Coverage",
+    "is_synthetic": true,
+    "description": "Merchant refund allegedly issued Oct 12; customer uploaded statement spanning only Oct 1 to Oct 5.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_06_claim", "filename": "merchant_email.pdf", "type": "EMAIL", "stated_refund_date": "2026-10-12" },
+      { "evidence_id": "evi_syn_06_bank", "filename": "partial_statement.pdf", "type": "BANK_STATEMENT", "date_range": ["2026-10-01", "2026-10-05"] }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 1,
+      "finding_type": "MISSING_EVIDENCE_ADVISORY",
+      "coverage_state": "INSUFFICIENT_COVERAGE"
+    }
+  },
+  {
+    "case_id": "case_syn_007_duplicate_evidence",
+    "case_name": "Case G: Duplicate Evidence Pack",
+    "is_synthetic": true,
+    "description": "User uploaded receipt under two separate names (receipt_scan.pdf and receipt_copy.png) with identical amounts and hash/metadata.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_07_f1", "filename": "receipt_scan.pdf", "type": "PDF", "amount": 499.0 },
+      { "evidence_id": "evi_syn_07_f2", "filename": "receipt_copy.png", "type": "IMAGE", "amount": 499.0 }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 0,
+      "is_duplicate": true
+    }
+  },
+  {
+    "case_id": "case_syn_008_noisy_ocr",
+    "case_name": "Case H: Noisy Screenshot OCR Error",
+    "is_synthetic": true,
+    "description": "Low-res chat screenshot where 'TXN-009182' is noisy OCR'd as 'TXN-O09I82'.",
+    "evidence_items": [
+      { "evidence_id": "evi_syn_08_screen", "filename": "blurred_chat.png", "type": "IMAGE", "ocr_raw": "TXN-O09I82", "true_id": "TXN-009182" },
+      { "evidence_id": "evi_syn_08_inv", "filename": "digital_invoice.pdf", "type": "PDF", "true_id": "TXN-009182" }
+    ],
+    "ground_truth": {
+      "expected_inconsistencies": 1,
+      "error_root_cause": "OCR_CHAR_SUBSTITUTION"
+    }
+  }
+]

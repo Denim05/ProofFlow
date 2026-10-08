@@ -1,0 +1,7 @@
+{"annotation_id": "ann_ent_001", "case_id": "case_syn_001_consistent", "document_id": "evi_syn_01_inv", "text": "₹10,000", "span": [15, 22], "label": "MONETARY_AMOUNT", "normalized_value": {"value": 10000.0, "currency": "INR"}}
+{"annotation_id": "ann_ent_002", "case_id": "case_syn_002_amount_mismatch", "document_id": "evi_syn_02_inv", "text": "₹10,000", "span": [10, 17], "label": "MONETARY_AMOUNT", "normalized_value": {"value": 10000.0, "currency": "INR"}}
+{"annotation_id": "ann_ent_003", "case_id": "case_syn_002_amount_mismatch", "document_id": "evi_syn_02_pay", "text": "₹12,000", "span": [20, 27], "label": "MONETARY_AMOUNT", "normalized_value": {"value": 12000.0, "currency": "INR"}}
+{"annotation_id": "ann_ent_004", "case_id": "case_syn_003_date_inconsistency", "document_id": "evi_syn_03_deliv", "text": "2026-10-01", "span": [0, 10], "label": "DATE", "normalized_value": "2026-10-01"}
+{"annotation_id": "ann_ent_005", "case_id": "case_syn_003_date_inconsistency", "document_id": "evi_syn_03_ship", "text": "2026-10-04", "span": [0, 10], "label": "DATE", "normalized_value": "2026-10-04"}
+{"annotation_id": "ann_ent_006", "case_id": "case_syn_008_noisy_ocr", "document_id": "evi_syn_08_screen", "text": "TXN-O09I82", "span": [5, 15], "label": "TRANSACTION_ID", "normalized_value": "TXN-O09I82"}
+{"annotation_id": "ann_ent_007", "case_id": "case_syn_008_noisy_ocr", "document_id": "evi_syn_08_inv", "text": "TXN-009182", "span": [5, 15], "label": "TRANSACTION_ID", "normalized_value": "TXN-009182"}

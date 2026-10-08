@@ -1,0 +1,4 @@
+{"annotation_id": "ann_evt_001", "case_id": "case_syn_001_consistent", "event_type": "ORDER_PLACED", "evidence_id": "evi_syn_01_inv", "timestamp": "2026-10-01T09:00:00Z", "amount": {"value": 10000.0, "currency": "INR"}}
+{"annotation_id": "ann_evt_002", "case_id": "case_syn_001_consistent", "event_type": "PAYMENT_MADE", "evidence_id": "evi_syn_01_pay", "timestamp": "2026-10-01T09:05:00Z", "amount": {"value": 10000.0, "currency": "INR"}}
+{"annotation_id": "ann_evt_003", "case_id": "case_syn_003_date_inconsistency", "event_type": "ORDER_DELIVERED", "evidence_id": "evi_syn_03_deliv", "timestamp": "2026-10-01T10:00:00Z"}
+{"annotation_id": "ann_evt_004", "case_id": "case_syn_003_date_inconsistency", "event_type": "ORDER_SHIPPED", "evidence_id": "evi_syn_03_ship", "timestamp": "2026-10-04T15:30:00Z"}

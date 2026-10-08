@@ -1,0 +1,89 @@
+{
+  "benchmark_size": 8,
+  "metrics": {
+    "true_positives": 5,
+    "false_positives": 0,
+    "true_negatives": 3,
+    "false_negatives": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "exact_match_accuracy": 1.0
+  },
+  "statistical_significance_note": "Sample size (N=8) is a preliminary controlled unit benchmark. Statistically meaningful generalizations require full Stage 2/3 datasets.",
+  "case_evaluations": [
+    {
+      "case_id": "case_syn_001_consistent",
+      "case_name": "Case A: Consistent Purchase & Refund Flow",
+      "expected_findings": 0,
+      "detected_findings": 0,
+      "finding_titles": []
+    },
+    {
+      "case_id": "case_syn_002_amount_mismatch",
+      "case_name": "Case B: Monetary Amount Mismatch",
+      "expected_findings": 1,
+      "detected_findings": 1,
+      "finding_titles": [
+        "Potential Inconsistency: Amount Discrepancy"
+      ]
+    },
+    {
+      "case_id": "case_syn_003_date_inconsistency",
+      "case_name": "Case C: Temporal Sequence Inconsistency",
+      "expected_findings": 1,
+      "detected_findings": 1,
+      "finding_titles": [
+        "Potential Inconsistency: Temporal Sequence Violation"
+      ]
+    },
+    {
+      "case_id": "case_syn_004_missing_refund_record",
+      "case_name": "Case D: Refund Claimed Without Supporting Record",
+      "expected_findings": 1,
+      "detected_findings": 1,
+      "finding_titles": [
+        "Missing Evidence Advisory: Refund Transaction Record"
+      ]
+    },
+    {
+      "case_id": "case_syn_005_temporally_compatible",
+      "case_name": "Case E: Contextually Compatible Claims",
+      "expected_findings": 0,
+      "detected_findings": 0,
+      "finding_titles": []
+    },
+    {
+      "case_id": "case_syn_006_insufficient_coverage",
+      "case_name": "Case F: Incomplete Date Range Coverage",
+      "expected_findings": 1,
+      "detected_findings": 1,
+      "finding_titles": [
+        "Missing Evidence Advisory: Refund Transaction Record"
+      ]
+    },
+    {
+      "case_id": "case_syn_007_duplicate_evidence",
+      "case_name": "Case G: Duplicate Evidence Pack",
+      "expected_findings": 0,
+      "detected_findings": 0,
+      "finding_titles": []
+    },
+    {
+      "case_id": "case_syn_008_noisy_ocr",
+      "case_name": "Case H: Noisy Screenshot OCR Error",
+      "expected_findings": 1,
+      "detected_findings": 1,
+      "finding_titles": [
+        "Potential Inconsistency: Identifier Mismatch"
+      ]
+    }
+  ],
+  "error_analysis": [
+    {
+      "case_id": "case_syn_008_noisy_ocr",
+      "error_class": "OCR_CHAR_SUBSTITUTION",
+      "detail": "Rule comparator correctly flagged mismatch, but underlying cause is OCR noise (O->0, I->1) rather than distinct transactions."
+    }
+  ]
+}
