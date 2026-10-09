@@ -251,7 +251,9 @@ export function CrossEvidenceComparison({
           normalizeReference(e.order_reference) ||
           normalizeReference(e.transaction_reference);
         return (
-          (e.event_type === "PAYMENT_CONFIRMED" ||
+          (e.event_type === "PAYMENT_MADE" ||
+            e.event_type === "PAYMENT_CONFIRMED" ||
+            e.event_type === "REFUND_COMPLETED" ||
             e.event_type === "REFUND_ISSUED" ||
             e.event_type === "REFUND_PROCESSED") &&
           eRef === normRef
@@ -273,7 +275,7 @@ export function CrossEvidenceComparison({
             case_id: paymentEv.case_id,
             finding_type: "MISSING_EVIDENCE_ADVISORY",
             title: `Unconfirmed Transaction Reference (${displayRef})`,
-            summary: `An outgoing transaction is asserted in evidence, but no corresponding settlement or confirmation document is present in the case. This indicates an uncorroborated claim or documentation gap, not proof of falsity.`,
+            summary: `An outgoing transaction is asserted in evidence, but no corresponding settlement or confirmation document is present in the case. This indicates an uncorroborated claim or documentation gap, not proof of a contradiction.`,
             severity: "MEDIUM",
             conflict_state: "POTENTIAL_CONFLICT",
             citations: [

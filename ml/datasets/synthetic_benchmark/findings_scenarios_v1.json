@@ -1,0 +1,506 @@
+{
+  "benchmark_version": "v1.0.0-findings-hardening",
+  "created_at": "2026-10-09T14:10:00Z",
+  "description": "Controlled synthetic evaluation suite for ProofFlow Findings Service and reasoning engine. Defines exact scenarios and expected ground-truth outcomes across 10 critical operational dimensions.",
+  "license": "Internal synthetic test suite - zero real user or private data",
+  "scenarios": [
+    {
+      "scenario_id": "scen_01_matching_events_consistent",
+      "category": "CONSISTENT_CROSS_DOC",
+      "description": "1. Matching events across different evidence documents: Invoice and Payment receipt agree on exact order reference PO-1001 and amount $5,000.00 USD.",
+      "evidence_documents": [
+        { "evidence_id": "evi_01_inv", "filename": "tax_invoice_1001.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_01_rcp", "filename": "payment_receipt_1001.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_01_a",
+          "evidence_id": "evi_01_inv",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Invoice PO-1001 total $5,000.00",
+          "char_start": 10,
+          "char_end": 40,
+          "page_number": 1,
+          "order_reference": "PO-1001",
+          "amount_currency": "USD",
+          "amount_value": "5000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.98
+        },
+        {
+          "event_id": "evt_01_b",
+          "evidence_id": "evi_01_rcp",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "PAYMENT_MADE",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Payment received for PO-1001: $5,000.00",
+          "char_start": 5,
+          "char_end": 45,
+          "page_number": 1,
+          "order_reference": "PO-1001",
+          "amount_currency": "USD",
+          "amount_value": "5000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.99
+        }
+      ],
+      "expected": {
+        "findings_count": 0,
+        "is_consistent": true,
+        "rationale": "Matching references and equal amounts between distinct documents represent consistent corroboration; zero findings must be emitted."
+      }
+    },
+    {
+      "scenario_id": "scen_02_differing_amounts_same_ref",
+      "category": "MONETARY_DISCREPANCY",
+      "description": "2. Different amounts for the same reference: Purchase Order asserts $12,000.00 while Invoice asserts $14,500.00 for reference PO-2002.",
+      "evidence_documents": [
+        { "evidence_id": "evi_02_po", "filename": "purchase_order_2002.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_02_inv", "filename": "final_invoice_2002.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_02_a",
+          "evidence_id": "evi_02_po",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "PO-2002 amount approved: $12,000.00",
+          "char_start": 12,
+          "char_end": 46,
+          "page_number": 1,
+          "order_reference": "PO-2002",
+          "amount_currency": "USD",
+          "amount_value": "12000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.99
+        },
+        {
+          "event_id": "evt_02_b",
+          "evidence_id": "evi_02_inv",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Billed under PO-2002: $14,500.00",
+          "char_start": 15,
+          "char_end": 47,
+          "page_number": 1,
+          "order_reference": "PO-2002",
+          "amount_currency": "USD",
+          "amount_value": "14500.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.97
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "POTENTIAL_CONFLICT",
+        "severity": "MEDIUM",
+        "finding_type": "POTENTIAL_INCONSISTENCY",
+        "citations_min": 2,
+        "rationale": "Amount divergence on identical reference in same currency must emit POTENTIAL_CONFLICT / MEDIUM, citing possible tax, partial milestone, or revision explanations without claiming fraud."
+      }
+    },
+    {
+      "scenario_id": "scen_03_currency_mismatch",
+      "category": "CURRENCY_MISMATCH",
+      "description": "3. Currency mismatches: Proposal is denominated in 10,000 USD while Invoice is in 10,000 EUR for reference REF-3003.",
+      "evidence_documents": [
+        { "evidence_id": "evi_03_prop", "filename": "commercial_proposal.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_03_inv", "filename": "euro_invoice.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_03_a",
+          "evidence_id": "evi_03_prop",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "REF-3003 quoted at $10,000.00 USD",
+          "char_start": 10,
+          "char_end": 44,
+          "page_number": 1,
+          "order_reference": "REF-3003",
+          "amount_currency": "USD",
+          "amount_value": "10000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.95
+        },
+        {
+          "event_id": "evt_03_b",
+          "evidence_id": "evi_03_inv",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "REF-3003 charged at €10,000.00 EUR",
+          "char_start": 10,
+          "char_end": 45,
+          "page_number": 1,
+          "order_reference": "REF-3003",
+          "amount_currency": "EUR",
+          "amount_value": "10000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.96
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "POTENTIAL_CONFLICT",
+        "severity": "MEDIUM",
+        "finding_type": "POTENTIAL_INCONSISTENCY",
+        "expected_title_contains": "Currency Denomination Mismatch",
+        "citations_min": 2,
+        "rationale": "Different currencies must NEVER be compared numerically; must emit advisory requiring exchange rate verification."
+      }
+    },
+    {
+      "scenario_id": "scen_04_opposing_event_polarity",
+      "category": "POLARITY_CONFLICT",
+      "description": "4. Opposing event polarity: Carrier scan asserts delivery completed POSITIVE while Dispute Letter asserts delivery was NOT completed NEGATED for order ORD-4004.",
+      "evidence_documents": [
+        { "evidence_id": "evi_04_carrier", "filename": "carrier_delivery_pod.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_04_dispute", "filename": "customer_affidavit.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_04_a",
+          "evidence_id": "evi_04_carrier",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ITEM_DELIVERED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Delivered successfully at porch for ORD-4004",
+          "char_start": 0,
+          "char_end": 44,
+          "page_number": 1,
+          "order_reference": "ORD-4004",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.97
+        },
+        {
+          "event_id": "evt_04_b",
+          "evidence_id": "evi_04_dispute",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ITEM_DELIVERED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Item was not delivered for ORD-4004",
+          "char_start": 0,
+          "char_end": 35,
+          "page_number": 1,
+          "order_reference": "ORD-4004",
+          "polarity": "NEGATED",
+          "model_confidence": 0.98
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "POTENTIAL_CONFLICT",
+        "severity": "MEDIUM",
+        "finding_type": "POTENTIAL_INCONSISTENCY",
+        "citations_min": 2,
+        "rationale": "Opposing polarity on the same event type and reference must produce POTENTIAL_CONFLICT, noting divergent factual claims."
+      }
+    },
+    {
+      "scenario_id": "scen_05_chronological_inconsistency",
+      "category": "TEMPORAL_SEQUENCE_ANOMALY",
+      "description": "5. Chronological inconsistencies: Order delivered timestamp strictly precedes order shipped timestamp on reference ORD-5005.",
+      "evidence_documents": [
+        { "evidence_id": "evi_05_pod", "filename": "delivery_pod.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_05_dispatch", "filename": "shipping_manifest.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_05_deliv",
+          "evidence_id": "evi_05_pod",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_DELIVERED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Delivered on 2026-10-01T10:00:00Z for ORD-5005",
+          "char_start": 0,
+          "char_end": 46,
+          "page_number": 1,
+          "order_reference": "ORD-5005",
+          "temporal_information": "2026-10-01T10:00:00Z",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.99
+        },
+        {
+          "event_id": "evt_05_ship",
+          "evidence_id": "evi_05_dispatch",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_SHIPPED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Dispatched on 2026-10-04T15:00:00Z for ORD-5005",
+          "char_start": 0,
+          "char_end": 47,
+          "page_number": 1,
+          "order_reference": "ORD-5005",
+          "temporal_information": "2026-10-04T15:00:00Z",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.99
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "POTENTIAL_CONFLICT",
+        "severity": "MEDIUM",
+        "finding_type": "POTENTIAL_INCONSISTENCY",
+        "citations_min": 2,
+        "rationale": "Chronological inversion must emit POTENTIAL_CONFLICT, citing timezones, retrospective entry, or batch delay caveats."
+      }
+    },
+    {
+      "scenario_id": "scen_06_missing_supporting_evidence",
+      "category": "MISSING_CORROBORATION",
+      "description": "6. Missing supporting evidence: Claim asserts payment sent under TXN-6006, but no settlement or confirmation document exists.",
+      "evidence_documents": [
+        { "evidence_id": "evi_06_claim", "filename": "wire_transfer_memo.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_06_wire",
+          "evidence_id": "evi_06_claim",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "PAYMENT_SENT",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Wire transfer sent under TXN-6006 for $8,200.00",
+          "char_start": 0,
+          "char_end": 47,
+          "page_number": 1,
+          "transaction_reference": "TXN-6006",
+          "amount_currency": "USD",
+          "amount_value": "8200.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.92
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "POTENTIAL_CONFLICT",
+        "severity": "MEDIUM",
+        "finding_type": "MISSING_EVIDENCE_ADVISORY",
+        "citations_min": 1,
+        "rationale": "Unconfirmed outgoing transaction must emit MISSING_EVIDENCE_ADVISORY, noting documentation gap rather than proof of a contradiction."
+      }
+    },
+    {
+      "scenario_id": "scen_07_uncertain_low_quality_extraction",
+      "category": "UNCERTAIN_EXTRACTION",
+      "description": "7. Uncertain or low-quality extraction: Optical noise causes OCR uncertainty on invoice amount, flagged as REVIEW_NEEDED.",
+      "evidence_documents": [
+        { "evidence_id": "evi_07_po", "filename": "purchase_order.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_07_noisy", "filename": "noisy_scanned_receipt.pdf", "active_processing_version": 1, "status": "REVIEW_NEEDED" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_07_clean",
+          "evidence_id": "evi_07_po",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Clean PO-7007 amount $3,000.00",
+          "char_start": 0,
+          "char_end": 30,
+          "page_number": 1,
+          "order_reference": "PO-7007",
+          "amount_currency": "USD",
+          "amount_value": "3000.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.99
+        },
+        {
+          "event_id": "evt_07_noisy",
+          "evidence_id": "evi_07_noisy",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "REVIEW_NEEDED",
+          "review_reasons": ["LOW_OCR_CONFIDENCE_ON_NUMERICAL_TOKEN"],
+          "trigger_raw_text": "Scanned PO-7007 amount $3,800.00",
+          "char_start": 0,
+          "char_end": 32,
+          "page_number": 1,
+          "order_reference": "PO-7007",
+          "amount_currency": "USD",
+          "amount_value": "3800.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.45
+        }
+      ],
+      "expected": {
+        "findings_count": 1,
+        "conflict_state": "INSUFFICIENT_CONTEXT",
+        "severity": "LOW",
+        "finding_type": "POTENTIAL_INCONSISTENCY",
+        "citations_min": 2,
+        "rationale": "When one or more extractions carry REVIEW_NEEDED uncertainty, divergence must be downgraded to INSUFFICIENT_CONTEXT / LOW."
+      }
+    },
+    {
+      "scenario_id": "scen_08_duplicate_documents_and_repeated_events",
+      "category": "DUPLICATE_DOCUMENTS",
+      "description": "8. Duplicate documents and repeated events: User uploaded duplicate copies of receipt under separate filenames with identical amounts and references.",
+      "evidence_documents": [
+        { "evidence_id": "evi_08_orig", "filename": "store_receipt.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_08_copy", "filename": "store_receipt_scan.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_08_a",
+          "evidence_id": "evi_08_orig",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "PAYMENT_MADE",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Paid $450.00 on TXN-8008",
+          "char_start": 0,
+          "char_end": 24,
+          "page_number": 1,
+          "transaction_reference": "TXN-8008",
+          "amount_currency": "USD",
+          "amount_value": "450.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.98
+        },
+        {
+          "event_id": "evt_08_b",
+          "evidence_id": "evi_08_copy",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "PAYMENT_MADE",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Paid $450.00 on TXN-8008",
+          "char_start": 0,
+          "char_end": 24,
+          "page_number": 1,
+          "transaction_reference": "TXN-8008",
+          "amount_currency": "USD",
+          "amount_value": "450.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.98
+        }
+      ],
+      "expected": {
+        "findings_count": 0,
+        "is_consistent": true,
+        "rationale": "Duplicate uploads with identical numbers must not trigger spurious discrepancies or duplicate finding entries."
+      }
+    },
+    {
+      "scenario_id": "scen_09_placeholder_references_ignored",
+      "category": "PLACEHOLDER_REFERENCES",
+      "description": "9. Irrelevant references and placeholder identifiers: Invoices contain generic placeholder tokens 'N/A', 'ORDER', 'REF' with differing amounts.",
+      "evidence_documents": [
+        { "evidence_id": "evi_09_a", "filename": "draft_a.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_09_b", "filename": "draft_b.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_09_a",
+          "evidence_id": "evi_09_a",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Order N/A billed $100.00",
+          "char_start": 0,
+          "char_end": 24,
+          "page_number": 1,
+          "order_reference": "N/A",
+          "amount_currency": "USD",
+          "amount_value": "100.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.95
+        },
+        {
+          "event_id": "evt_09_b",
+          "evidence_id": "evi_09_b",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Order N/A billed $500.00",
+          "char_start": 0,
+          "char_end": 24,
+          "page_number": 1,
+          "order_reference": "N/A",
+          "amount_currency": "USD",
+          "amount_value": "500.00",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.95
+        }
+      ],
+      "expected": {
+        "findings_count": 0,
+        "is_consistent": true,
+        "rationale": "Placeholder identifiers like 'N/A', 'NONE', 'ORDER' must be normalized to None, preventing false positive cross-document collisions."
+      }
+    },
+    {
+      "scenario_id": "scen_10_missing_dates_amounts_malformed",
+      "category": "MISSING_AND_MALFORMED",
+      "description": "10. Missing dates, missing amounts, and malformed values: Events have missing amounts, None timestamps, or invalid strings.",
+      "evidence_documents": [
+        { "evidence_id": "evi_10_a", "filename": "memo_a.pdf", "active_processing_version": 1, "status": "READY" },
+        { "evidence_id": "evi_10_b", "filename": "memo_b.pdf", "active_processing_version": 1, "status": "READY" }
+      ],
+      "events": [
+        {
+          "event_id": "evt_10_a",
+          "evidence_id": "evi_10_a",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_PLACED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Order PO-1010 initiated without amount",
+          "char_start": 0,
+          "char_end": 39,
+          "page_number": 1,
+          "order_reference": "PO-1010",
+          "amount_currency": null,
+          "amount_value": null,
+          "temporal_information": "invalid-date-string",
+          "polarity": "POSITIVE",
+          "model_confidence": 0.90
+        },
+        {
+          "event_id": "evt_10_b",
+          "evidence_id": "evi_10_b",
+          "processing_version": 1,
+          "is_active": true,
+          "event_type": "ORDER_SHIPPED",
+          "decision_state": "VALIDATED",
+          "trigger_raw_text": "Order PO-1010 shipped",
+          "char_start": 0,
+          "char_end": 21,
+          "page_number": 1,
+          "order_reference": "PO-1010",
+          "amount_currency": "USD",
+          "amount_value": "250.00",
+          "temporal_information": null,
+          "polarity": "POSITIVE",
+          "model_confidence": 0.90
+        }
+      ],
+      "expected": {
+        "findings_count": 0,
+        "is_consistent": true,
+        "rationale": "Missing amount on one side or absent/malformed timestamps must fail safely without throwing exceptions or emitting spurious discrepancies."
+      }
+    }
+  ]
+}

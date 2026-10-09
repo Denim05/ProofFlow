@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from bson import Decimal128
 import pytest
 from httpx import AsyncClient
 
@@ -1281,3 +1282,552 @@ async def test_bson_decimal128_full_pipeline_compatibility(client: AsyncClient, 
     assert "Currency Denomination Mismatch" in curr_findings[0]["title"]
     assert curr_findings[0]["conflict_state"] == "POTENTIAL_CONFLICT"
     assert "EUR" in curr_findings[0]["summary"] and "USD" in curr_findings[0]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_findings_dual_reference_cross_matching(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Event with both order_reference and transaction_reference matches event possessing only transaction_reference."""
+    case_id = "case_dual_ref"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_order", "po_order.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_bank", "bank_statement.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_dual_1",
+            "case_id": case_id,
+            "evidence_id": "evi_order",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ORDER_PLACED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Order PO-DUAL-100 settled via TXN-DUAL-200 for $3,000.00",
+            "char_start": 0,
+            "char_end": 50,
+            "order_reference": "PO-DUAL-100",
+            "transaction_reference": "TXN-DUAL-200",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("3000.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_dual_2",
+            "case_id": case_id,
+            "evidence_id": "evi_bank",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Bank wire TXN-DUAL-200 for $3,500.00",
+            "char_start": 0,
+            "char_end": 35,
+            "order_reference": None,
+            "transaction_reference": "TXN-DUAL-200",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("3500.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.98,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(
+        f"/api/v1/cases/{case_id}/findings",
+        headers={"X-User-ID": MOCK_USER},
+    )
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    assert "Amount Divergence" in items[0]["title"]
+    assert "TXN-DUAL-200" in items[0]["title"] or "TXNDUAL200" in items[0]["title"]
+
+
+@pytest.mark.asyncio
+async def test_findings_mutually_exclusive_payment_outcomes(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Conflicting settlement outcomes (PAYMENT_MADE vs PAYMENT_FAILED) emit outcome conflict finding."""
+    case_id = "case_outcome_conflict"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_succ", "receipt_paid.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_fail", "gateway_decline.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_out_1",
+            "case_id": case_id,
+            "evidence_id": "evi_succ",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Payment successful for TXN-7777",
+            "char_start": 0,
+            "char_end": 31,
+            "transaction_reference": "TXN-7777",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("100.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_out_2",
+            "case_id": case_id,
+            "evidence_id": "evi_fail",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_FAILED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Payment declined for TXN-7777",
+            "char_start": 0,
+            "char_end": 29,
+            "transaction_reference": "TXN-7777",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("100.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(
+        f"/api/v1/cases/{case_id}/findings",
+        headers={"X-User-ID": MOCK_USER},
+    )
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    assert "Opposing Outcome on Payment Settlement Outcome" in items[0]["title"]
+    assert items[0]["conflict_state"] == "POTENTIAL_CONFLICT"
+    assert items[0]["severity"] == "MEDIUM"
+    assert "retry attempts" in items[0]["summary"].lower()
+    assert items[0]["field_diff"]["field"] == "Transaction Status"
+
+
+@pytest.mark.asyncio
+async def test_findings_mutually_exclusive_retry_progression_low_severity(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """When PAYMENT_FAILED precedes PAYMENT_MADE (retry progression), severity is downgraded to LOW."""
+    case_id = "case_outcome_retry"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_f", "failed_attempt.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_s", "success_retry.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_ret_1",
+            "case_id": case_id,
+            "evidence_id": "evi_f",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_FAILED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "First attempt declined for TXN-RETRY",
+            "char_start": 0,
+            "char_end": 34,
+            "transaction_reference": "TXN-RETRY",
+            "temporal_information": "2026-06-01T10:00:00Z",  # Failed first at 10:00
+            "polarity": "POSITIVE",
+            "model_confidence": 0.98,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_ret_2",
+            "case_id": case_id,
+            "evidence_id": "evi_s",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Retry payment succeeded for TXN-RETRY",
+            "char_start": 0,
+            "char_end": 37,
+            "transaction_reference": "TXN-RETRY",
+            "temporal_information": "2026-06-01T10:05:00Z",  # Succeeded 5 mins later at 10:05
+            "polarity": "POSITIVE",
+            "model_confidence": 0.98,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    # Conservative severity: retry progression is LOW severity, not HIGH
+    assert items[0]["severity"] == "LOW"
+    assert "probable retry" in items[0]["summary"].lower()
+
+
+
+@pytest.mark.asyncio
+async def test_adversarial_partial_payment_vs_full_payment(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Partial installment vs full order emits POTENTIAL_CONFLICT noting stage-level differences."""
+    case_id = "case_partial_pmt"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_inv", "invoice.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_rec", "receipt.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_p_1",
+            "case_id": case_id,
+            "evidence_id": "evi_inv",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ORDER_PLACED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Invoice total for PO-9900: $10,000.00",
+            "char_start": 0,
+            "char_end": 35,
+            "order_reference": "PO-9900",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("10000.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.98,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_p_2",
+            "case_id": case_id,
+            "evidence_id": "evi_rec",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Deposit payment for PO-9900: $3,000.00",
+            "char_start": 0,
+            "char_end": 37,
+            "order_reference": "PO-9900",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("3000.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.98,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    assert items[0]["conflict_state"] == "POTENTIAL_CONFLICT"
+    assert "partial payments" in items[0]["summary"].lower()
+
+
+@pytest.mark.asyncio
+async def test_adversarial_refund_requested_corroborated_by_completed(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Refund requested corroborated by refund completed emits no unconfirmed advisory."""
+    case_id = "case_refund_corrob"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_req", "refund_request.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_settle", "refund_credit_memo.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_ref_1",
+            "case_id": case_id,
+            "evidence_id": "evi_req",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "REFUND_REQUESTED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Refund requested for REF-888",
+            "char_start": 0,
+            "char_end": 28,
+            "transaction_reference": "REF-888",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("200.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_ref_2",
+            "case_id": case_id,
+            "evidence_id": "evi_settle",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "REFUND_COMPLETED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Refund processed for REF-888",
+            "char_start": 0,
+            "char_end": 28,
+            "transaction_reference": "REF-888",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("200.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    # Corroborated and amounts equal -> 0 findings
+    assert len(items) == 0
+
+
+@pytest.mark.asyncio
+async def test_adversarial_duplicate_uploads_different_evidence_ids(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Identical document re-uploaded under different evidence ID emits 0 findings."""
+    case_id = "case_dup_upload"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_orig", "doc_orig.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_copy", "doc_copy.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_d_1",
+            "case_id": case_id,
+            "evidence_id": "evi_orig",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Paid $500.00 on TXN-DUP-1",
+            "char_start": 0,
+            "char_end": 25,
+            "transaction_reference": "TXN-DUP-1",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("500.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.99,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_d_2",
+            "case_id": case_id,
+            "evidence_id": "evi_copy",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Paid $500.00 on TXN-DUP-1",
+            "char_start": 0,
+            "char_end": 25,
+            "transaction_reference": "TXN-DUP-1",
+            "amount_currency": "USD",
+            "amount_value": Decimal128("500.00"),
+            "polarity": "POSITIVE",
+            "model_confidence": 0.99,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 0
+
+
+@pytest.mark.asyncio
+async def test_adversarial_timezone_offsets_and_date_only_values(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Mixed date-only strings and offset-aware datetimes compare safely in UTC without TypeError."""
+    case_id = "case_tz_safe"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_order", "order.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_ship", "tracking.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_tz_1",
+            "case_id": case_id,
+            "evidence_id": "evi_order",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ORDER_PLACED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Order PO-TZ placed",
+            "char_start": 0,
+            "char_end": 18,
+            "order_reference": "PO-TZ",
+            "temporal_information": "2026-05-10",  # date-only naive
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_tz_2",
+            "case_id": case_id,
+            "evidence_id": "evi_ship",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ITEM_SHIPPED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Shipped ahead of order",
+            "char_start": 0,
+            "char_end": 22,
+            "order_reference": "PO-TZ",
+            "temporal_information": "2026-05-09T18:00:00+02:00",  # offset-aware (May 9 16:00 UTC)
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    assert "Temporal Sequence Anomaly" in items[0]["title"]
+
+
+@pytest.mark.asyncio
+async def test_adversarial_intra_document_conflicts_isolated(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Contradicting events within the same evidence document are not treated as cross-evidence inconsistencies."""
+    case_id = "case_intra_doc"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_single", "single_multi_page.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_intra_1",
+            "case_id": case_id,
+            "evidence_id": "evi_single",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_MADE",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Page 1: Payment success for TXN-INTRA",
+            "char_start": 0,
+            "char_end": 35,
+            "page_number": 1,
+            "transaction_reference": "TXN-INTRA",
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_intra_2",
+            "case_id": case_id,
+            "evidence_id": "evi_single",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "PAYMENT_FAILED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Page 2: Payment failed for TXN-INTRA",
+            "char_start": 0,
+            "char_end": 34,
+            "page_number": 2,
+            "transaction_reference": "TXN-INTRA",
+            "polarity": "POSITIVE",
+            "model_confidence": 0.95,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 0
+
+
+@pytest.mark.asyncio
+async def test_adversarial_malformed_amounts_and_dates_fail_safely(
+    client: AsyncClient, fake_db: FakeAsyncDatabase
+):
+    """Non-numeric amounts and unparseable date strings fail safely without exceptions or spurious findings."""
+    case_id = "case_malformed_safe"
+    await setup_case(fake_db, case_id)
+    await setup_evidence(fake_db, case_id, "evi_bad_a", "bad_a.pdf", active_version=1)
+    await setup_evidence(fake_db, case_id, "evi_bad_b", "bad_b.pdf", active_version=1)
+
+    await fake_db.events.insert_many([
+        {
+            "event_id": "evt_m_1",
+            "case_id": case_id,
+            "evidence_id": "evi_bad_a",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ORDER_PLACED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Order PO-MALFORMED",
+            "char_start": 0,
+            "char_end": 18,
+            "order_reference": "PO-MALFORMED",
+            "amount_currency": "USD",
+            "amount_value": "not-a-number",
+            "temporal_information": "invalid-datetime-string",
+            "polarity": "POSITIVE",
+            "model_confidence": 0.90,
+            "created_at": datetime.now(timezone.utc),
+        },
+        {
+            "event_id": "evt_m_2",
+            "case_id": case_id,
+            "evidence_id": "evi_bad_b",
+            "user_id": MOCK_USER,
+            "processing_version": 1,
+            "is_active": True,
+            "event_type": "ITEM_SHIPPED",
+            "decision_state": "VALIDATED",
+            "review_reasons": [],
+            "trigger_raw_text": "Shipped PO-MALFORMED",
+            "char_start": 0,
+            "char_end": 20,
+            "order_reference": "PO-MALFORMED",
+            "amount_currency": None,
+            "amount_value": None,
+            "temporal_information": None,
+            "polarity": "POSITIVE",
+            "model_confidence": 0.90,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ])
+
+    resp = await client.get(f"/api/v1/cases/{case_id}/findings", headers={"X-User-ID": MOCK_USER})
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 0

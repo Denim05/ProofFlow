@@ -1,6 +1,6 @@
 import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 from pymongo.asynchronous.database import AsyncDatabase
@@ -48,6 +48,11 @@ EXPECTED_PRECEDENCE = [
     ("REFUND_COMPLETED", "REFUND_RECEIVED"),
 ]
 
+MUTUALLY_EXCLUSIVE_TYPES = {
+    frozenset({"PAYMENT_MADE", "PAYMENT_FAILED"}): "Payment Settlement Outcome",
+    frozenset({"REFUND_COMPLETED", "REFUND_FAILED"}): "Refund Processing Outcome",
+}
+
 
 def normalize_reference(ref: Optional[str]) -> Optional[str]:
     """Normalizes business references (order IDs, tracking numbers, transaction IDs).
@@ -64,18 +69,27 @@ def normalize_reference(ref: Optional[str]) -> Optional[str]:
 
 
 def parse_explicit_timestamp(val: Any) -> Optional[datetime]:
-    """Strictly parses explicit ISO datetime without falling back to ingestion/creation times."""
+    """Strictly parses explicit ISO datetime without falling back to ingestion/creation times.
+
+    Normalizes all timestamps to UTC-aware datetimes to safely handle timezone offsets,
+    date-only strings, and avoid naive/aware comparison crashes.
+    """
     if val is None:
         return None
     if isinstance(val, datetime):
-        return val
+        if val.tzinfo is None:
+            return val.replace(tzinfo=timezone.utc)
+        return val.astimezone(timezone.utc)
     if isinstance(val, str):
         trimmed = val.strip()
         if not trimmed:
             return None
         # Must resemble ISO-8601 date or datetime
         try:
-            return datetime.fromisoformat(trimmed.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(trimmed.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
         except (ValueError, TypeError):
             return None
     return None
@@ -149,8 +163,8 @@ class FindingService:
         4. All findings cite real source evidence; provenance is never fabricated.
         5. Cross-document comparisons require distinct evidence IDs.
         6. Conservative comparison semantics: differing amounts, polarity, and temporal inversions
-           are classified as POTENTIAL_CONFLICT or INSUFFICIENT_CONTEXT. Never described as fraud or falsity.
-        7. Missing corroboration is flagged as MISSING_EVIDENCE_ADVISORY, not proof of falsity.
+           are classified as POTENTIAL_CONFLICT or INSUFFICIENT_CONTEXT. Never described as fraud or unproven accusation.
+        7. Missing corroboration is flagged as MISSING_EVIDENCE_ADVISORY, not proof of a contradiction.
         8. Temporal reasoning uses strictly explicit event timestamps.
         9. Output is deterministically deduplicated and ordered.
         """
@@ -211,28 +225,28 @@ class FindingService:
         findings: List[FindingResponse] = []
         seen_finding_ids: Set[str] = set()
 
-        # 3. Reference-based cross-document comparisons (Monetary & Polarity)
-        # Group events by normalized order_reference or transaction_reference
+        # 3. Reference-based cross-document comparisons (Monetary, Polarity, Outcomes)
+        # Group events by normalized order_reference and/or transaction_reference
         ref_groups: Dict[str, Dict[str, Any]] = {}
         for ev in events:
             norm_order = normalize_reference(ev.get("order_reference"))
             norm_txn = normalize_reference(ev.get("transaction_reference"))
 
+            refs_to_index: List[Tuple[str, str]] = []
             if norm_order:
-                if norm_order not in ref_groups:
-                    ref_groups[norm_order] = {
-                        "display_ref": ev.get("order_reference", "").strip(),
-                        "items": [],
-                    }
-                ref_groups[norm_order]["items"].append(ev)
-            elif norm_txn:
-                if norm_txn not in ref_groups:
-                    ref_groups[norm_txn] = {
-                        "display_ref": ev.get("transaction_reference", "").strip(),
-                        "items": [],
-                    }
-                ref_groups[norm_txn]["items"].append(ev)
+                refs_to_index.append((norm_order, (ev.get("order_reference") or "").strip()))
+            if norm_txn and norm_txn != norm_order:
+                refs_to_index.append((norm_txn, (ev.get("transaction_reference") or "").strip()))
 
+            for ref_key, disp in refs_to_index:
+                if ref_key not in ref_groups:
+                    ref_groups[ref_key] = {
+                        "display_ref": disp,
+                        "items": [],
+                    }
+                ref_groups[ref_key]["items"].append(ev)
+
+        evaluated_pairs: Set[Tuple[str, str, str]] = set()
         for norm_key, group_data in ref_groups.items():
             display_ref = group_data["display_ref"]
             group_events = group_data["items"]
@@ -419,50 +433,204 @@ class FindingService:
                     type_a = ev_a.get("event_type")
                     type_b = ev_b.get("event_type")
                     if type_a == type_b and pol_a and pol_b and pol_a != pol_b:
-                        f_id = generate_finding_id(
-                            case_id,
-                            "POLARITY_CONFLICT",
-                            norm_key,
-                            [ev_a["event_id"], ev_b["event_id"]],
-                        )
-                        if f_id not in seen_finding_ids:
-                            seen_finding_ids.add(f_id)
-                            event_clean_name = type_a.replace("_", " ")
-                            findings.append(
-                                FindingResponse(
-                                    finding_id=f_id,
-                                    case_id=case_id,
-                                    finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
-                                    title=f"Potential Inconsistency: Opposing Assertion on {event_clean_name} ({display_ref})",
-                                    summary=(
-                                        f"One document asserts this milestone positively, while another document "
-                                        f"asserts negative polarity for reference '{display_ref}'. "
-                                        f"This indicates divergent factual claims regarding whether this event occurred."
-                                    ),
-                                    severity="MEDIUM",
-                                    conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
-                                    citations=[
-                                        build_citation(ev_a, evidence_name_map),
-                                        build_citation(ev_b, evidence_name_map),
-                                    ],
-                                    field_diff=FieldDifference(
-                                        field="Assertion Polarity",
-                                        value_a=pol_a,
-                                        source_a=f"{source_a}{page_a_suffix}",
-                                        value_b=pol_b,
-                                        source_b=f"{source_b}{page_b_suffix}",
-                                    ),
-                                    model_confidence=min(
-                                        float(ev_a.get("model_confidence", 1.0)),
-                                        float(ev_b.get("model_confidence", 1.0)),
-                                    ),
-                                    model_name=REASONING_METADATA.model_name,
-                                )
+                        pol_key = (min(ev_a["event_id"], ev_b["event_id"]), max(ev_a["event_id"], ev_b["event_id"]), "POLARITY")
+                        if pol_key not in evaluated_pairs:
+                            evaluated_pairs.add(pol_key)
+                            f_id = generate_finding_id(
+                                case_id,
+                                "POLARITY_CONFLICT",
+                                norm_key,
+                                [ev_a["event_id"], ev_b["event_id"]],
                             )
+                            if f_id not in seen_finding_ids:
+                                seen_finding_ids.add(f_id)
+                                event_clean_name = type_a.replace("_", " ")
+                                is_uncertain = (
+                                    ev_a.get("decision_state") == "REVIEW_NEEDED"
+                                    or ev_b.get("decision_state") == "REVIEW_NEEDED"
+                                    or float(ev_a.get("model_confidence", 1.0)) < 0.70
+                                    or float(ev_b.get("model_confidence", 1.0)) < 0.70
+                                )
+                                if is_uncertain:
+                                    findings.append(
+                                        FindingResponse(
+                                            finding_id=f_id,
+                                            case_id=case_id,
+                                            finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                            title=f"Uncertain Comparison: Opposing Assertion on {event_clean_name} ({display_ref})",
+                                            summary=(
+                                                f"One document asserts this milestone positively while another asserts "
+                                                f"negative polarity for reference '{display_ref}', but extraction certainty is flagged for review. "
+                                                f"Manual verification is advised before evaluating inconsistency."
+                                            ),
+                                            severity="LOW",
+                                            conflict_state=ConflictState.INSUFFICIENT_CONTEXT.value,
+                                            citations=[
+                                                build_citation(ev_a, evidence_name_map),
+                                                build_citation(ev_b, evidence_name_map),
+                                            ],
+                                            field_diff=FieldDifference(
+                                                field="Assertion Polarity",
+                                                value_a=pol_a,
+                                                source_a=f"{source_a}{page_a_suffix}",
+                                                value_b=pol_b,
+                                                source_b=f"{source_b}{page_b_suffix}",
+                                            ),
+                                            model_confidence=min(
+                                                float(ev_a.get("model_confidence", 0.5)),
+                                                float(ev_b.get("model_confidence", 0.5)),
+                                            ),
+                                            model_name=REASONING_METADATA.model_name,
+                                        )
+                                    )
+                                else:
+                                    findings.append(
+                                        FindingResponse(
+                                            finding_id=f_id,
+                                            case_id=case_id,
+                                            finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                            title=f"Potential Inconsistency: Opposing Assertion on {event_clean_name} ({display_ref})",
+                                            summary=(
+                                                f"One document asserts this milestone positively, while another document "
+                                                f"asserts negative polarity for reference '{display_ref}'. "
+                                                f"This indicates divergent factual claims regarding whether this event occurred."
+                                            ),
+                                            severity="MEDIUM",
+                                            conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
+                                            citations=[
+                                                build_citation(ev_a, evidence_name_map),
+                                                build_citation(ev_b, evidence_name_map),
+                                            ],
+                                            field_diff=FieldDifference(
+                                                field="Assertion Polarity",
+                                                value_a=pol_a,
+                                                source_a=f"{source_a}{page_a_suffix}",
+                                                value_b=pol_b,
+                                                source_b=f"{source_b}{page_b_suffix}",
+                                            ),
+                                            model_confidence=min(
+                                                float(ev_a.get("model_confidence", 1.0)),
+                                                float(ev_b.get("model_confidence", 1.0)),
+                                            ),
+                                            model_name=REASONING_METADATA.model_name,
+                                        )
+                                    )
 
-        # 4. Missing Corroboration Analysis (e.g., PAYMENT_SENT without confirmation)
-        outgoing_tx_types = {"PAYMENT_SENT", "PAYMENT_MADE", "REFUND_REQUESTED"}
-        confirmation_types = {"PAYMENT_CONFIRMED", "REFUND_ISSUED", "REFUND_PROCESSED", "REFUND_COMPLETED"}
+                    # --- C. Mutually Exclusive Outcome Comparisons ---
+                    pair_types = frozenset({type_a, type_b})
+                    if pair_types in MUTUALLY_EXCLUSIVE_TYPES:
+                        outcome_key = (min(ev_a["event_id"], ev_b["event_id"]), max(ev_a["event_id"], ev_b["event_id"]), "OUTCOME")
+                        if outcome_key not in evaluated_pairs:
+                            evaluated_pairs.add(outcome_key)
+                            f_id = generate_finding_id(
+                                case_id,
+                                "OUTCOME_CONFLICT",
+                                norm_key,
+                                [ev_a["event_id"], ev_b["event_id"]],
+                            )
+                            if f_id not in seen_finding_ids:
+                                seen_finding_ids.add(f_id)
+                                domain_label = MUTUALLY_EXCLUSIVE_TYPES[pair_types]
+                                clean_a = (type_a or "").replace("_", " ").title()
+                                clean_b = (type_b or "").replace("_", " ").title()
+                                is_uncertain = (
+                                    ev_a.get("decision_state") == "REVIEW_NEEDED"
+                                    or ev_b.get("decision_state") == "REVIEW_NEEDED"
+                                    or float(ev_a.get("model_confidence", 1.0)) < 0.70
+                                    or float(ev_b.get("model_confidence", 1.0)) < 0.70
+                                )
+                                if is_uncertain:
+                                    findings.append(
+                                        FindingResponse(
+                                            finding_id=f_id,
+                                            case_id=case_id,
+                                            finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                            title=f"Uncertain Comparison: Opposing Outcome on {domain_label} ({display_ref})",
+                                            summary=(
+                                                f"One document asserts '{clean_a}' while another asserts '{clean_b}' "
+                                                f"for reference '{display_ref}', but extraction certainty is flagged for review. "
+                                                f"Manual verification is advised before evaluating inconsistency."
+                                            ),
+                                            severity="LOW",
+                                            conflict_state=ConflictState.INSUFFICIENT_CONTEXT.value,
+                                            citations=[
+                                                build_citation(ev_a, evidence_name_map),
+                                                build_citation(ev_b, evidence_name_map),
+                                            ],
+                                            field_diff=FieldDifference(
+                                                field="Transaction Status",
+                                                value_a=clean_a,
+                                                source_a=f"{source_a}{page_a_suffix}",
+                                                value_b=clean_b,
+                                                source_b=f"{source_b}{page_b_suffix}",
+                                            ),
+                                            model_confidence=min(
+                                                float(ev_a.get("model_confidence", 0.5)),
+                                                float(ev_b.get("model_confidence", 0.5)),
+                                            ),
+                                            model_name=REASONING_METADATA.model_name,
+                                        )
+                                    )
+                                else:
+                                    # Analyze chronology and retry / reversal plausibility
+                                    failed_ev = ev_a if "FAILED" in type_a else ev_b
+                                    success_ev = ev_a if "FAILED" not in type_a else ev_b
+                                    ts_failed = parse_explicit_timestamp(
+                                        failed_ev.get("temporal_information") or failed_ev.get("timestamp")
+                                    )
+                                    ts_success = parse_explicit_timestamp(
+                                        success_ev.get("temporal_information") or success_ev.get("timestamp")
+                                    )
+
+                                    is_probable_retry = (
+                                        ts_failed is not None
+                                        and ts_success is not None
+                                        and ts_failed < ts_success
+                                    )
+
+                                    # When chronology is ambiguous, missing, or indicates subsequent retry,
+                                    # conservative semantics prevent assigning HIGH severity on confidence alone.
+                                    outcome_severity = "LOW" if is_probable_retry else "MEDIUM"
+                                    retry_note = (
+                                        " Chronological records indicate a failed attempt followed by a subsequent successful settlement (probable retry)."
+                                        if is_probable_retry
+                                        else " Chronology, retry attempts, or asynchronous gateway settlement latencies should be verified before inferring an operational conflict."
+                                    )
+
+                                    findings.append(
+                                        FindingResponse(
+                                            finding_id=f_id,
+                                            case_id=case_id,
+                                            finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                            title=f"Potential Inconsistency: Opposing Outcome on {domain_label} ({display_ref})",
+                                            summary=(
+                                                f"One document asserts '{clean_a}' ({source_a}) while another asserts "
+                                                f"'{clean_b}' ({source_b}) for reference '{display_ref}'.{retry_note}"
+                                            ),
+                                            severity=outcome_severity,
+                                            conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
+                                            citations=[
+                                                build_citation(ev_a, evidence_name_map),
+                                                build_citation(ev_b, evidence_name_map),
+                                            ],
+                                            field_diff=FieldDifference(
+                                                field="Transaction Status",
+                                                value_a=clean_a,
+                                                source_a=f"{source_a}{page_a_suffix}",
+                                                value_b=clean_b,
+                                                source_b=f"{source_b}{page_b_suffix}",
+                                            ),
+                                            model_confidence=min(
+                                                float(ev_a.get("model_confidence", 1.0)),
+                                                float(ev_b.get("model_confidence", 1.0)),
+                                            ),
+                                            model_name=REASONING_METADATA.model_name,
+                                        )
+                                    )
+
+        # 4. Missing Corroboration Analysis (e.g., in-transit assertions without settlement)
+        outgoing_tx_types = {"PAYMENT_SENT", "REFUND_REQUESTED", "REFUND_INITIATED"}
+        confirmation_types = {"PAYMENT_MADE", "PAYMENT_CONFIRMED", "REFUND_ISSUED", "REFUND_PROCESSED", "REFUND_COMPLETED"}
 
         for ev in events:
             ev_type = ev.get("event_type", "")
@@ -500,7 +668,7 @@ class FindingService:
                                 summary=(
                                     f"An outgoing transaction is asserted in evidence, but no corresponding settlement "
                                     f"or confirmation document is present in the case. This indicates an uncorroborated "
-                                    f"claim or documentation gap, not proof of falsity."
+                                    f"claim or documentation gap, not proof of a contradiction."
                                 ),
                                 severity="MEDIUM",
                                 conflict_state=ConflictState.POTENTIAL_CONFLICT.value,

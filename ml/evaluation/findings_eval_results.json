@@ -1,0 +1,140 @@
+{
+  "benchmark_version": "v1.0.0-findings-hardening",
+  "timestamp": "2026-10-09T09:05:46.130830+00:00",
+  "total_scenarios": 10,
+  "passed_scenarios": 10,
+  "scenario_pass_rate": 1.0,
+  "scenario_level_metrics": {
+    "unit": "scenario_outcome",
+    "true_positives": 6,
+    "true_negatives": 4,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "false_positive_rate": 0.0,
+    "denominators": {
+      "precision": "6 / (6 + 0)",
+      "recall": "6 / (6 + 0)",
+      "fpr": "0 / (0 + 4)"
+    }
+  },
+  "finding_level_metrics": {
+    "unit": "individual_finding",
+    "true_positives": 6,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "denominators": {
+      "precision": "6 / (6 + 0)",
+      "recall": "6 / (6 + 0)"
+    }
+  },
+  "scenario_details": [
+    {
+      "scenario_id": "scen_01_matching_events_consistent",
+      "category": "CONSISTENT_CROSS_DOC",
+      "passed": true,
+      "expected_count": 0,
+      "actual_count": 0,
+      "failure_reasons": [],
+      "findings_titles": []
+    },
+    {
+      "scenario_id": "scen_02_differing_amounts_same_ref",
+      "category": "MONETARY_DISCREPANCY",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Potential Inconsistency: Amount Divergence on Reference PO-2002"
+      ]
+    },
+    {
+      "scenario_id": "scen_03_currency_mismatch",
+      "category": "CURRENCY_MISMATCH",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Potential Inconsistency: Currency Denomination Mismatch on Reference REF-3003"
+      ]
+    },
+    {
+      "scenario_id": "scen_04_opposing_event_polarity",
+      "category": "POLARITY_CONFLICT",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Potential Inconsistency: Opposing Assertion on ITEM DELIVERED (ORD-4004)"
+      ]
+    },
+    {
+      "scenario_id": "scen_05_chronological_inconsistency",
+      "category": "TEMPORAL_SEQUENCE_ANOMALY",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Potential Inconsistency: Temporal Sequence Anomaly (ORD5005)"
+      ]
+    },
+    {
+      "scenario_id": "scen_06_missing_supporting_evidence",
+      "category": "MISSING_CORROBORATION",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Unconfirmed Transaction Reference (TXN-6006)"
+      ]
+    },
+    {
+      "scenario_id": "scen_07_uncertain_low_quality_extraction",
+      "category": "UNCERTAIN_EXTRACTION",
+      "passed": true,
+      "expected_count": 1,
+      "actual_count": 1,
+      "failure_reasons": [],
+      "findings_titles": [
+        "Uncertain Comparison: Amount Divergence on Reference PO-7007"
+      ]
+    },
+    {
+      "scenario_id": "scen_08_duplicate_documents_and_repeated_events",
+      "category": "DUPLICATE_DOCUMENTS",
+      "passed": true,
+      "expected_count": 0,
+      "actual_count": 0,
+      "failure_reasons": [],
+      "findings_titles": []
+    },
+    {
+      "scenario_id": "scen_09_placeholder_references_ignored",
+      "category": "PLACEHOLDER_REFERENCES",
+      "passed": true,
+      "expected_count": 0,
+      "actual_count": 0,
+      "failure_reasons": [],
+      "findings_titles": []
+    },
+    {
+      "scenario_id": "scen_10_missing_dates_amounts_malformed",
+      "category": "MISSING_AND_MALFORMED",
+      "passed": true,
+      "expected_count": 0,
+      "actual_count": 0,
+      "failure_reasons": [],
+      "findings_titles": []
+    }
+  ]
+}
