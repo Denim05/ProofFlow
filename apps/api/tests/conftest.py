@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from app.core.dependencies import get_db
@@ -53,33 +53,36 @@ class FakeAsyncCollection:
             self.documents.append(copy.deepcopy(doc))
         return type("InsertManyResult", (), {"inserted_ids": [d.get("_id", "mock_id") for d in docs]})()
 
+    @staticmethod
+    def _matches_condition(doc: Dict[str, Any], k: str, v: Any) -> bool:
+        if k == "$or" and isinstance(v, list):
+            return any(FakeAsyncCollection._matches(doc, cond) for cond in v)
+        if isinstance(v, dict):
+            if "$in" in v:
+                return doc.get(k) in v["$in"]
+            if "$lt" in v:
+                val = doc.get(k)
+                return val is not None and val < v["$lt"]
+            if "$ne" in v:
+                return doc.get(k) != v["$ne"]
+        return doc.get(k) == v
+
+    @classmethod
+    def _matches(cls, doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
+        for k, v in query.items():
+            if not cls._matches_condition(doc, k, v):
+                return False
+        return True
+
     async def find_one(self, query: Dict[str, Any]):
         for doc in self.documents:
-            match = True
-            for k, v in query.items():
-                if isinstance(v, dict) and "$in" in v:
-                    if doc.get(k) not in v["$in"]:
-                        match = False
-                        break
-                elif doc.get(k) != v:
-                    match = False
-                    break
-            if match:
+            if self._matches(doc, query):
                 return copy.deepcopy(doc)
         return None
 
     async def find_one_and_update(self, filter_query: Dict[str, Any], update_query: Dict[str, Any], return_document=False):
         for doc in self.documents:
-            match = True
-            for k, v in filter_query.items():
-                if isinstance(v, dict) and "$in" in v:
-                    if doc.get(k) not in v["$in"]:
-                        match = False
-                        break
-                elif doc.get(k) != v:
-                    match = False
-                    break
-            if match:
+            if self._matches(doc, filter_query):
                 old_doc = copy.deepcopy(doc)
                 if "$set" in update_query:
                     doc.update(copy.deepcopy(update_query["$set"]))
@@ -91,12 +94,7 @@ class FakeAsyncCollection:
 
     async def update_one(self, filter_query: Dict[str, Any], update_query: Dict[str, Any]):
         for doc in self.documents:
-            match = True
-            for k, v in filter_query.items():
-                if doc.get(k) != v:
-                    match = False
-                    break
-            if match:
+            if self._matches(doc, filter_query):
                 if "$set" in update_query:
                     doc.update(copy.deepcopy(update_query["$set"]))
                 if "$inc" in update_query:
@@ -105,49 +103,37 @@ class FakeAsyncCollection:
                 return type("UpdateResult", (), {"modified_count": 1})()
         return type("UpdateResult", (), {"modified_count": 0})()
 
+    async def update_many(self, filter_query: Dict[str, Any], update_query: Dict[str, Any]):
+        modified_count = 0
+        for doc in self.documents:
+            if self._matches(doc, filter_query):
+                if "$set" in update_query:
+                    doc.update(copy.deepcopy(update_query["$set"]))
+                if "$inc" in update_query:
+                    for inc_k, inc_v in update_query["$inc"].items():
+                        doc[inc_k] = doc.get(inc_k, 0) + inc_v
+                modified_count += 1
+        return type("UpdateResult", (), {"modified_count": modified_count})()
+
     async def delete_many(self, query: Dict[str, Any]):
         initial_len = len(self.documents)
-        new_docs = []
-        for doc in self.documents:
-            match = True
-            for k, v in query.items():
-                if isinstance(v, dict) and "$lt" in v:
-                    if doc.get(k) < v["$lt"]:
-                        continue
-                    else:
-                        match = False
-                        break
-                elif doc.get(k) != v:
-                    match = False
-                    break
-            if not match:
-                new_docs.append(doc)
+        new_docs = [doc for doc in self.documents if not self._matches(doc, query)]
         self.documents = new_docs
         return type("DeleteResult", (), {"deleted_count": initial_len - len(new_docs)})()
 
-    def find(self, query: Dict[str, Any]):
+    def find(self, query: Dict[str, Any], projection: Optional[Dict[str, Any]] = None):
         matching = []
         for doc in self.documents:
-            match = True
-            for k, v in query.items():
-                if doc.get(k) != v:
-                    match = False
-                    break
-            if match:
-                matching.append(copy.deepcopy(doc))
+            if self._matches(doc, query):
+                if projection:
+                    projected = {k: v for k, v in doc.items() if projection.get(k)}
+                    matching.append(copy.deepcopy(projected))
+                else:
+                    matching.append(copy.deepcopy(doc))
         return FakeAsyncCursor(matching)
 
     async def count_documents(self, query: Dict[str, Any]) -> int:
-        count = 0
-        for doc in self.documents:
-            match = True
-            for k, v in query.items():
-                if doc.get(k) != v:
-                    match = False
-                    break
-            if match:
-                count += 1
-        return count
+        return sum(1 for doc in self.documents if self._matches(doc, query))
 
     async def create_index(self, *args, **kwargs):
         return "idx_created"

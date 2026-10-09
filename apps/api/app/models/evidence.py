@@ -43,6 +43,8 @@ class EvidenceDocument(BaseModel):
     status: EvidenceStatus = Field(default=EvidenceStatus.QUEUED)
     processing_mode: MLProcessingMode = Field(default=MLProcessingMode.DETERMINISTIC_FALLBACK)
     processing_version: int = Field(default=1, ge=1, description="Increments on each successful reprocessing to version event sets")
+    active_processing_version: Optional[int] = Field(default=None, description="Authoritative active version visible to event queries")
+    current_run_id: Optional[str] = Field(default=None, description="Unique run identifier of the in-flight or active processing execution")
     job_id: Optional[str] = None
     retry_count: int = Field(default=0, ge=0)
     heartbeat_at: Optional[datetime] = None

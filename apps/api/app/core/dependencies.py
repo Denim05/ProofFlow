@@ -16,12 +16,10 @@ def get_current_user_id(
     requires a valid user identity.
     """
     if settings.ENVIRONMENT.lower() == "production":
-        if not x_user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required: missing user identity",
-            )
-        return x_user_id
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Production authentication required: client-supplied X-User-ID header is prohibited. Configure authenticated identity provider / API gateway.",
+        )
 
     # Non-production development / test fallback
     return x_user_id.strip() if x_user_id and x_user_id.strip() else "dev_user_default"

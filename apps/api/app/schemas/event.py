@@ -11,6 +11,9 @@ class EventResponse(BaseModel):
     event_id: str
     case_id: str
     evidence_id: str
+    processing_version: int = 1
+    processing_run_id: Optional[str] = None
+    is_active: bool = True
     event_type: str
     decision_state: str
     review_reasons: List[str] = []

@@ -30,13 +30,16 @@ class LocalStorageService:
 
     def _resolve_safe_path(self, relative_path: str) -> str:
         """Resolves path and guarantees it resides within storage_root to prevent path traversal."""
-        full_path = os.path.abspath(os.path.join(self.storage_root, relative_path))
-        if not full_path.startswith(self.storage_root):
+        from pathlib import Path
+
+        root = Path(self.storage_root).resolve()
+        candidate = (root / relative_path).resolve()
+        if not candidate.is_relative_to(root):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid storage path: directory traversal prohibited.",
             )
-        return full_path
+        return str(candidate)
 
     async def save_upload_stream(
         self,
@@ -124,16 +127,17 @@ class LocalStorageService:
 
             # Secondary deep validation for PDF integrity
             if detected_mime == "application/pdf":
+                pdf_doc = None
                 try:
-                    doc = pymupdf.open(temp_path)
-                    if doc.is_encrypted:
-                        doc.close()
+                    with open(temp_path, "rb") as f_check:
+                        pdf_data = f_check.read()
+                    pdf_doc = pymupdf.open(stream=pdf_data, filetype="pdf")
+                    if pdf_doc.is_encrypted:
                         raise HTTPException(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail="PDF is password-protected or encrypted. Unencrypted document required.",
                         )
-                    page_count = len(doc)
-                    doc.close()
+                    page_count = len(pdf_doc)
                     if page_count == 0:
                         raise HTTPException(
                             status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,6 +151,12 @@ class LocalStorageService:
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Corrupted or malformed PDF file.",
                     )
+                finally:
+                    if pdf_doc is not None:
+                        try:
+                            pdf_doc.close()
+                        except Exception:
+                            pass
 
             # Atomic commit to permanent storage
             sha256 = hasher.hexdigest()
@@ -163,6 +173,9 @@ class LocalStorageService:
         finally:
             # Guarantee removal of temporary staging file on failure or success
             if os.path.exists(temp_path):
+                import gc
+
+                gc.collect()
                 try:
                     os.remove(temp_path)
                 except OSError:

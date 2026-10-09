@@ -18,6 +18,8 @@ class EventDocument(BaseModel):
     evidence_id: str
     user_id: str
     processing_version: int = Field(default=1, ge=1, description="Version of the extraction run that generated this event")
+    processing_run_id: Optional[str] = Field(default=None, description="Unique processing run identifier that created this staged event")
+    is_active: bool = Field(default=True, description="Active status for reader queries; staged retry events remain False until atomic activation")
     event_type: str = Field(..., description="Canonical ProofFlow EventType name")
     decision_state: str = Field(..., description="'VALIDATED' or 'REVIEW_NEEDED'")
     review_reasons: List[str] = Field(default_factory=list)

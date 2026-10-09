@@ -86,7 +86,7 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
     2. cases: user_id + created_at
     3. cases: user_id + status + created_at
     """
-    target_db = db or _db
+    target_db = db if db is not None else _db
     if target_db is None:
         return
 
@@ -130,7 +130,8 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
         )
         await target_db.evidence.create_index(
             [("case_id", pymongo.ASCENDING), ("sha256_hash", pymongo.ASCENDING)],
-            name="idx_evidence_case_sha256",
+            unique=True,
+            name="idx_evidence_case_sha256_unique",
         )
         await target_db.evidence.create_index(
             [("status", pymongo.ASCENDING), ("heartbeat_at", pymongo.ASCENDING)],
@@ -147,9 +148,18 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
             [
                 ("user_id", pymongo.ASCENDING),
                 ("case_id", pymongo.ASCENDING),
-                ("evidence_id", pymongo.ASCENDING),
+                ("is_active", pymongo.ASCENDING),
             ],
-            name="idx_events_user_case_evidence",
+            name="idx_events_user_case_active",
+        )
+        await target_db.events.create_index(
+            [
+                ("user_id", pymongo.ASCENDING),
+                ("case_id", pymongo.ASCENDING),
+                ("evidence_id", pymongo.ASCENDING),
+                ("is_active", pymongo.ASCENDING),
+            ],
+            name="idx_events_user_case_evidence_active",
         )
         await target_db.events.create_index(
             [("case_id", pymongo.ASCENDING), ("decision_state", pymongo.ASCENDING)],
@@ -158,6 +168,14 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
         await target_db.events.create_index(
             [("case_id", pymongo.ASCENDING), ("event_type", pymongo.ASCENDING)],
             name="idx_events_case_event_type",
+        )
+        await target_db.events.create_index(
+            [("evidence_id", pymongo.ASCENDING), ("processing_version", pymongo.ASCENDING)],
+            name="idx_events_evidence_version",
+        )
+        await target_db.events.create_index(
+            [("evidence_id", pymongo.ASCENDING), ("processing_run_id", pymongo.ASCENDING)],
+            name="idx_events_evidence_run",
         )
 
         logger.info("MongoDB collection indexes initialized successfully.")

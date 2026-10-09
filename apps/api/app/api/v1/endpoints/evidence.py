@@ -103,7 +103,36 @@ async def upload_evidence(
     )
 
     doc_dict = doc.model_dump()
-    await db.evidence.insert_one(doc_dict)
+    try:
+        await db.evidence.insert_one(doc_dict)
+    except Exception as exc:
+        # Determine if error is a duplicate key race on (case_id, sha256_hash)
+        is_dup_race = "duplicate key" in str(exc).lower() or getattr(exc, "code", None) == 11000
+
+        # Protect against orphaned evidence files: remove uploaded file if no other record references it
+        other_ref = await db.evidence.find_one({"storage_relative_path": rel_path})
+        if not other_ref:
+            storage_service.remove_evidence_file(rel_path)
+
+        if is_dup_race:
+            # Deterministic resolution: return existing winner document
+            winner = await db.evidence.find_one(
+                {"case_id": case_id, "user_id": user_id, "sha256_hash": sha256_hash}
+            )
+            if winner:
+                upload_data = EvidenceUploadResponse(
+                    evidence_id=winner["evidence_id"],
+                    case_id=winner["case_id"],
+                    original_filename=winner["original_filename"],
+                    media_type=winner["media_type"],
+                    file_size_bytes=winner["file_size_bytes"],
+                    sha256_hash=winner["sha256_hash"],
+                    status=winner["status"],
+                    is_duplicate=True,
+                    created_at=winner["created_at"],
+                )
+                return APIResponse(data=upload_data)
+        raise exc
 
     # Dispatch background extraction job
     job = ProcessingJob(
@@ -212,37 +241,50 @@ async def retry_evidence_processing(
         EvidenceStatus.INTERRUPTED.value,
         EvidenceStatus.REVIEW_NEEDED.value,
     ]
-    if row["status"] not in allowed_retry_statuses:
+
+    claimed = await db.evidence.find_one_and_update(
+        {
+            "evidence_id": evidence_id,
+            "case_id": case_id,
+            "user_id": user_id,
+            "status": {"$in": allowed_retry_statuses},
+        },
+        {
+            "$set": {
+                "status": EvidenceStatus.QUEUED.value,
+                "error_code": None,
+                "error_message": None,
+                "updated_at": utc_now(),
+            },
+            "$inc": {"retry_count": 1},
+        },
+        return_document=True,
+    )
+
+    if not claimed:
+        row = await db.evidence.find_one(
+            {"evidence_id": evidence_id, "case_id": case_id, "user_id": user_id}
+        )
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Evidence '{evidence_id}' was not found",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot retry evidence with status '{row['status']}'. Allowed statuses: {allowed_retry_statuses}",
         )
 
-    new_retry_count = row.get("retry_count", 0) + 1
-    await db.evidence.update_one(
-        {"evidence_id": evidence_id},
-        {
-            "$set": {
-                "status": EvidenceStatus.QUEUED.value,
-                "retry_count": new_retry_count,
-                "error_code": None,
-                "error_message": None,
-                "updated_at": utc_now(),
-            }
-        },
-    )
-
     job = ProcessingJob(
         evidence_id=evidence_id,
         case_id=case_id,
         user_id=user_id,
-        storage_relative_path=row["storage_relative_path"],
-        original_filename=row["original_filename"],
-        media_type=row["media_type"],
-        sha256_hash=row["sha256_hash"],
-        retry_count=new_retry_count,
+        storage_relative_path=claimed["storage_relative_path"],
+        original_filename=claimed["original_filename"],
+        media_type=claimed["media_type"],
+        sha256_hash=claimed["sha256_hash"],
+        retry_count=claimed.get("retry_count", 1),
     )
     background_tasks.add_task(evidence_processing_service.run_job, job, db)
 
-    updated_row = await db.evidence.find_one({"evidence_id": evidence_id})
-    return APIResponse(data=EvidenceResponse(**updated_row))
+    return APIResponse(data=EvidenceResponse(**claimed))

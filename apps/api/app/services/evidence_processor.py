@@ -54,7 +54,8 @@ class EvidenceProcessingService:
 
     async def run_job(self, job: ProcessingJob, db: AsyncDatabase) -> None:
         """Executes full document extraction, entity normalization, and event extraction."""
-        # 1. Atomic state claim to enforce idempotency
+        # 1. Unique run identifier and atomic state claim
+        run_id = f"run_{uuid.uuid4().hex[:20]}"
         claimed = await db.evidence.find_one_and_update(
             {
                 "evidence_id": job.evidence_id,
@@ -63,6 +64,7 @@ class EvidenceProcessingService:
                         EvidenceStatus.QUEUED.value,
                         EvidenceStatus.FAILED.value,
                         EvidenceStatus.INTERRUPTED.value,
+                        EvidenceStatus.REVIEW_NEEDED.value,
                     ]
                 },
             },
@@ -70,6 +72,7 @@ class EvidenceProcessingService:
                 "$set": {
                     "status": EvidenceStatus.EXTRACTING.value,
                     "job_id": job.job_id,
+                    "current_run_id": run_id,
                     "retry_count": job.retry_count,
                     "heartbeat_at": utc_now(),
                     "updated_at": utc_now(),
@@ -82,10 +85,11 @@ class EvidenceProcessingService:
             logger.info("Job %s skipped: evidence %s already active or terminal.", job.job_id, job.evidence_id)
             return
 
-        current_version = claimed.get("processing_version", 1)
-        target_version = current_version + (1 if job.retry_count > 0 else 0)
+        prior_active_version = claimed.get("active_processing_version")
+        target_version = (prior_active_version + 1) if prior_active_version is not None else 1
         mode = self.detect_processing_mode()
 
+        activation_committed = False
         try:
             # 2. Read raw binary content
             file_bytes = storage_service.read_evidence_bytes(job.storage_relative_path)
@@ -103,7 +107,7 @@ class EvidenceProcessingService:
 
             # Update status to STRUCTURING
             await db.evidence.update_one(
-                {"evidence_id": job.evidence_id},
+                {"evidence_id": job.evidence_id, "current_run_id": run_id},
                 {
                     "$set": {
                         "status": EvidenceStatus.STRUCTURING.value,
@@ -118,7 +122,7 @@ class EvidenceProcessingService:
 
             # Update status to ANALYZING
             await db.evidence.update_one(
-                {"evidence_id": job.evidence_id},
+                {"evidence_id": job.evidence_id, "current_run_id": run_id},
                 {
                     "$set": {
                         "status": EvidenceStatus.ANALYZING.value,
@@ -166,6 +170,8 @@ class EvidenceProcessingService:
                     evidence_id=job.evidence_id,
                     user_id=job.user_id,
                     processing_version=target_version,
+                    processing_run_id=run_id,
+                    is_active=True,
                     event_type=etype_val,
                     decision_state=dstate_val,
                     review_reasons=res.review_reasons,
@@ -189,20 +195,11 @@ class EvidenceProcessingService:
                 )
                 staged_events.append(event_doc.model_dump())
 
-            # Commit staged events atomically
+            # 1. Commit staged events under unique run_id and target_version
             if staged_events:
                 await db.events.insert_many(staged_events)
 
-            # Purge superseded older version events for this evidence asset only after success
-            if target_version > current_version:
-                await db.events.delete_many(
-                    {
-                        "evidence_id": job.evidence_id,
-                        "processing_version": {"$lt": target_version},
-                    }
-                )
-
-            # 7. Final status resolution
+            # 2. Final status resolution
             q_state = getattr(evidence_text.overall_quality_state, "value", str(evidence_text.overall_quality_state))
             is_review_needed = (
                 q_state == ExtractionQualityState.REVIEW_NEEDED.value
@@ -219,40 +216,106 @@ class EvidenceProcessingService:
                 "processing_version": target_version,
             }
 
-            await db.evidence.update_one(
-                {"evidence_id": job.evidence_id},
-                {
-                    "$set": {
-                        "status": getattr(final_status, "value", str(final_status)),
-                        "processing_mode": getattr(mode, "value", str(mode)),
-                        "processing_version": target_version,
-                        "extraction_summary": extraction_summary,
-                        "heartbeat_at": utc_now(),
-                        "updated_at": utc_now(),
-                    }
-                },
-            )
-
-            # Update parent case evidence counter if this was first successful run
-            if claimed.get("status") in (EvidenceStatus.QUEUED.value, EvidenceStatus.UPLOADED.value):
-                await db.cases.update_one(
-                    {"case_id": job.case_id},
-                    {"$inc": {"evidence_count": 1}, "$set": {"updated_at": utc_now()}},
+            # 3. Atomically switch evidence document's active version conditioned on ownership and expected prior version
+            version_filter = {"$in": [None, 0]} if prior_active_version is None else prior_active_version
+            switch_filter = {
+                "evidence_id": job.evidence_id,
+                "current_run_id": run_id,
+                "active_processing_version": version_filter,
+            }
+            switch_update = {
+                "$set": {
+                    "active_processing_version": target_version,
+                    "processing_version": target_version,
+                    "status": getattr(final_status, "value", str(final_status)),
+                    "processing_mode": getattr(mode, "value", str(mode)),
+                    "extraction_summary": extraction_summary,
+                    "heartbeat_at": utc_now(),
+                    "updated_at": utc_now(),
+                }
+            }
+            switch_res = await db.evidence.update_one(switch_filter, switch_update)
+            if switch_res.modified_count == 0:
+                # Pointer switch failed: rollback staged events for this run
+                if staged_events:
+                    await db.events.delete_many(
+                        {"evidence_id": job.evidence_id, "processing_run_id": run_id}
+                    )
+                raise RuntimeError(
+                    f"Atomic pointer switch failed for evidence {job.evidence_id} run {run_id}"
                 )
 
+            # Mark activation as committed: subsequent maintenance tasks cannot invalidate this run
+            activation_committed = True
+
+            # 4. Old-version cleanup is a recoverable maintenance task.
+            # Failure must never roll back newly active events or mark an active run as failed.
+            try:
+                await db.events.delete_many(
+                    {
+                        "evidence_id": job.evidence_id,
+                        "processing_version": {"$lt": target_version},
+                    }
+                )
+            except Exception as cleanup_err:
+                logger.warning(
+                    "Recoverable maintenance warning: Failed to purge superseded events for evidence %s: %s",
+                    job.evidence_id,
+                    str(cleanup_err),
+                )
+
+            # Update parent case evidence counter if this was first successful run
+            try:
+                if claimed.get("status") in (EvidenceStatus.QUEUED.value, EvidenceStatus.UPLOADED.value):
+                    await db.cases.update_one(
+                        {"case_id": job.case_id},
+                        {"$inc": {"evidence_count": 1}, "$set": {"updated_at": utc_now()}},
+                    )
+            except Exception as case_err:
+                logger.warning("Non-fatal case counter update warning for evidence %s: %s", job.evidence_id, str(case_err))
+
             logger.info(
-                "Job %s completed for evidence %s: status=%s, mode=%s, events=%d",
+                "Job %s completed for evidence %s: status=%s, mode=%s, events=%d, active_version=%d",
                 job.job_id,
                 job.evidence_id,
                 getattr(final_status, "value", str(final_status)),
                 getattr(mode, "value", str(mode)),
                 len(staged_events),
+                target_version,
             )
 
         except Exception as exc:
-            logger.error("Processing failure on evidence %s: %s", job.evidence_id, str(exc), exc_info=True)
+            if activation_committed:
+                # Activation has already committed successfully!
+                # Never roll back active events or mark the document as FAILED.
+                logger.warning(
+                    "Post-activation maintenance warning for evidence %s run %s: %s",
+                    job.evidence_id,
+                    run_id,
+                    str(exc),
+                )
+                return
+
+            logger.error(
+                "Processing failure on evidence %s run %s before activation: %s",
+                job.evidence_id,
+                run_id,
+                str(exc),
+                exc_info=True,
+            )
+            # Safe rollback: purge staged events ONLY for this specific run_id
+            try:
+                await db.events.delete_many(
+                    {"evidence_id": job.evidence_id, "processing_run_id": run_id}
+                )
+            except Exception as rollback_err:
+                logger.warning("Failed to clean up staged events on error: %s", str(rollback_err))
+
             await db.evidence.update_one(
-                {"evidence_id": job.evidence_id},
+                {
+                    "evidence_id": job.evidence_id,
+                    "current_run_id": run_id,
+                },
                 {
                     "$set": {
                         "status": EvidenceStatus.FAILED.value,
@@ -263,6 +326,64 @@ class EvidenceProcessingService:
                     }
                 },
             )
+
+    async def recover_interrupted_jobs(
+        self,
+        db: AsyncDatabase,
+        timeout_seconds: int = 300,
+    ) -> int:
+        """Scans for in-flight jobs exceeding heartbeat timeout, atomically claims them, and cleans up uncommitted staged events."""
+        from datetime import timedelta
+
+        cutoff = utc_now() - timedelta(seconds=timeout_seconds)
+        cursor = db.evidence.find(
+            {
+                "status": {
+                    "$in": [
+                        EvidenceStatus.EXTRACTING.value,
+                        EvidenceStatus.STRUCTURING.value,
+                        EvidenceStatus.ANALYZING.value,
+                    ]
+                },
+                "heartbeat_at": {"$lt": cutoff},
+            }
+        )
+        recovered_count = 0
+        async for doc in cursor:
+            evi_id = doc["evidence_id"]
+            stale_run_id = doc.get("current_run_id")
+
+            # Conditional atomic claim of stale job:
+            claim_filter: Dict[str, Any] = {
+                "evidence_id": evi_id,
+                "status": doc["status"],
+                "heartbeat_at": doc["heartbeat_at"],
+            }
+            if stale_run_id:
+                claim_filter["current_run_id"] = stale_run_id
+
+            claim_update = {
+                "$set": {
+                    "status": EvidenceStatus.INTERRUPTED.value,
+                    "error_code": "JOB_INTERRUPTED",
+                    "error_message": f"Processing heartbeat timed out after {timeout_seconds}s.",
+                    "updated_at": utc_now(),
+                }
+            }
+            claim_res = await db.evidence.update_one(claim_filter, claim_update)
+            if claim_res.modified_count == 1:
+                # Successfully claimed: delete staged events ONLY for the specific stale run being recovered
+                if stale_run_id:
+                    await db.events.delete_many(
+                        {"evidence_id": evi_id, "processing_run_id": stale_run_id}
+                    )
+                else:
+                    await db.events.delete_many(
+                        {"evidence_id": evi_id, "processing_version": {"$ne": doc.get("active_processing_version")}}
+                    )
+                recovered_count += 1
+                logger.warning("Recovered interrupted job for evidence %s run %s", evi_id, stale_run_id)
+        return recovered_count
 
 
 evidence_processing_service = EvidenceProcessingService()

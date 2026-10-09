@@ -33,12 +33,42 @@ async def list_case_events(
     user_id: str = Depends(get_current_user_id),
     db: AsyncDatabase = Depends(get_db),
 ):
-    """Retrieves paginated extracted events across the entire case, with optional evidence and state filtering."""
+    """Retrieves paginated extracted events across the entire case, filtering strictly by active processing version."""
     await _verify_case_ownership(case_id, user_id, db)
 
     query: dict = {"case_id": case_id, "user_id": user_id}
+
     if evidence_id:
+        evi_row = await db.evidence.find_one({"evidence_id": evidence_id, "case_id": case_id, "user_id": user_id})
+        if not evi_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Evidence '{evidence_id}' was not found in case '{case_id}'",
+            )
+        active_ver = evi_row.get("active_processing_version")
+        if active_ver is None:
+            pagination = PaginationMeta(page=page, limit=limit, total=0, pages=0)
+            return APIResponse(data=EventListResponse(items=[], pagination=pagination))
         query["evidence_id"] = evidence_id
+        query["processing_version"] = active_ver
+    else:
+        # Resolve all active evidence documents in the case
+        evi_cursor = db.evidence.find(
+            {"case_id": case_id, "user_id": user_id},
+            {"evidence_id": 1, "active_processing_version": 1},
+        )
+        active_pairs = []
+        async for doc in evi_cursor:
+            ver = doc.get("active_processing_version")
+            if ver is not None:
+                active_pairs.append({"evidence_id": doc["evidence_id"], "processing_version": ver})
+
+        if not active_pairs:
+            pagination = PaginationMeta(page=page, limit=limit, total=0, pages=0)
+            return APIResponse(data=EventListResponse(items=[], pagination=pagination))
+
+        query["$or"] = active_pairs
+
     if decision_state:
         query["decision_state"] = decision_state
     if event_type:
@@ -73,7 +103,7 @@ async def list_evidence_specific_events(
     user_id: str = Depends(get_current_user_id),
     db: AsyncDatabase = Depends(get_db),
 ):
-    """Retrieves paginated extracted events originating strictly from a specific evidence asset."""
+    """Retrieves paginated extracted events originating strictly from a specific evidence asset's active processing version."""
     await _verify_case_ownership(case_id, user_id, db)
 
     # Verify evidence asset exists in this case
@@ -84,7 +114,17 @@ async def list_evidence_specific_events(
             detail=f"Evidence '{evidence_id}' was not found in case '{case_id}'",
         )
 
-    query: dict = {"case_id": case_id, "evidence_id": evidence_id, "user_id": user_id}
+    active_ver = evi_row.get("active_processing_version")
+    if active_ver is None:
+        pagination = PaginationMeta(page=page, limit=limit, total=0, pages=0)
+        return APIResponse(data=EventListResponse(items=[], pagination=pagination))
+
+    query: dict = {
+        "case_id": case_id,
+        "evidence_id": evidence_id,
+        "user_id": user_id,
+        "processing_version": active_ver,
+    }
     if decision_state:
         query["decision_state"] = decision_state
     if event_type:

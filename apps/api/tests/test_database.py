@@ -39,21 +39,37 @@ async def test_db_health_when_ping_fails():
 
 @pytest.mark.asyncio
 async def test_init_db_indexes():
-    """Verify init_db_indexes establishes the 3 approved indexes with exact parameters."""
+    """Verify init_db_indexes establishes approved indexes across cases, evidence, and events."""
     mock_db = MagicMock()
     mock_cases = MagicMock()
     mock_cases.create_index = AsyncMock()
+    mock_evidence = MagicMock()
+    mock_evidence.create_index = AsyncMock()
+    mock_events = MagicMock()
+    mock_events.create_index = AsyncMock()
+
     mock_db.cases = mock_cases
+    mock_db.evidence = mock_evidence
+    mock_db.events = mock_events
 
     await database.init_db_indexes(mock_db)
 
     assert mock_cases.create_index.await_count == 3
-    created_index_names = [
-        call.kwargs.get("name") for call in mock_cases.create_index.await_args_list
-    ]
-    assert "idx_cases_case_id_unique" in created_index_names
-    assert "idx_cases_user_created" in created_index_names
-    assert "idx_cases_user_status_created" in created_index_names
+    cases_indexes = [call.kwargs.get("name") for call in mock_cases.create_index.await_args_list]
+    assert "idx_cases_case_id_unique" in cases_indexes
+    assert "idx_cases_user_created" in cases_indexes
+    assert "idx_cases_user_status_created" in cases_indexes
+
+    assert mock_evidence.create_index.await_count == 4
+    evidence_indexes = [call.kwargs.get("name") for call in mock_evidence.create_index.await_args_list]
+    assert "idx_evidence_evidence_id_unique" in evidence_indexes
+    assert "idx_evidence_case_sha256_unique" in evidence_indexes
+
+    assert mock_events.create_index.await_count == 7
+    events_indexes = [call.kwargs.get("name") for call in mock_events.create_index.await_args_list]
+    assert "idx_events_event_id_unique" in events_indexes
+    assert "idx_events_evidence_version" in events_indexes
+    assert "idx_events_evidence_run" in events_indexes
 
 
 @pytest.mark.asyncio
