@@ -113,6 +113,53 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
             ],
             name="idx_cases_user_status_created",
         )
+
+        # Evidence Collection Indexes
+        await target_db.evidence.create_index(
+            [("evidence_id", pymongo.ASCENDING)],
+            unique=True,
+            name="idx_evidence_evidence_id_unique",
+        )
+        await target_db.evidence.create_index(
+            [
+                ("user_id", pymongo.ASCENDING),
+                ("case_id", pymongo.ASCENDING),
+                ("created_at", pymongo.DESCENDING),
+            ],
+            name="idx_evidence_user_case_created",
+        )
+        await target_db.evidence.create_index(
+            [("case_id", pymongo.ASCENDING), ("sha256_hash", pymongo.ASCENDING)],
+            name="idx_evidence_case_sha256",
+        )
+        await target_db.evidence.create_index(
+            [("status", pymongo.ASCENDING), ("heartbeat_at", pymongo.ASCENDING)],
+            name="idx_evidence_status_heartbeat",
+        )
+
+        # Events Collection Indexes
+        await target_db.events.create_index(
+            [("event_id", pymongo.ASCENDING)],
+            unique=True,
+            name="idx_events_event_id_unique",
+        )
+        await target_db.events.create_index(
+            [
+                ("user_id", pymongo.ASCENDING),
+                ("case_id", pymongo.ASCENDING),
+                ("evidence_id", pymongo.ASCENDING),
+            ],
+            name="idx_events_user_case_evidence",
+        )
+        await target_db.events.create_index(
+            [("case_id", pymongo.ASCENDING), ("decision_state", pymongo.ASCENDING)],
+            name="idx_events_case_decision_state",
+        )
+        await target_db.events.create_index(
+            [("case_id", pymongo.ASCENDING), ("event_type", pymongo.ASCENDING)],
+            name="idx_events_case_event_type",
+        )
+
         logger.info("MongoDB collection indexes initialized successfully.")
     except Exception as exc:
         logger.warning("Could not initialize MongoDB indexes: %s", str(exc))

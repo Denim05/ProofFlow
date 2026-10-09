@@ -1,0 +1,383 @@
+{
+  "dataset_name": "ProofFlow Canonical Event Dataset",
+  "dataset_version": "3.0.0-canonical-18",
+  "taxonomy_version": "1.0.0-canonical-18",
+  "label_mapping_version": "1.0.0",
+  "preprocessing_version": "1.0.0",
+  "random_seed": 42,
+  "source_provenance": "ProofFlow v2.0.0-improved dataset (683 samples, 28 raw classes)",
+  "summary": {
+    "total_samples": 683,
+    "canonical_and_negative_samples": 573,
+    "unmapped_legacy_dispute_samples": 110,
+    "canonical_classes_count": 18,
+    "total_classifier_targets": 19
+  },
+  "split_counts": {
+    "train": {
+      "total": 483,
+      "canonical_and_negative": 408,
+      "unmapped_legacy": 75
+    },
+    "val": {
+      "total": 104,
+      "canonical_and_negative": 89,
+      "unmapped_legacy": 15
+    },
+    "test": {
+      "total": 96,
+      "canonical_and_negative": 76,
+      "unmapped_legacy": 20
+    }
+  },
+  "leakage_verification": {
+    "exact_duplicates_train_val": 0,
+    "exact_duplicates_train_test": 0,
+    "exact_duplicates_val_test": 0
+  },
+  "taxonomy_categories_breakdown": {
+    "LEGACY_DISPUTE": 110,
+    "CANONICAL": 450,
+    "NEGATIVE_SAMPLE": 35,
+    "COMPATIBILITY_ALIAS": 88
+  },
+  "canonical_classes": [
+    "ORDER_PLACED",
+    "PAYMENT_MADE",
+    "PAYMENT_FAILED",
+    "REFUND_REQUESTED",
+    "REFUND_INITIATED",
+    "REFUND_COMPLETED",
+    "REFUND_FAILED",
+    "ORDER_CANCELLED",
+    "ITEM_SHIPPED",
+    "DELIVERY_ATTEMPTED",
+    "ITEM_DELIVERED",
+    "RETURN_REQUESTED",
+    "RETURN_PICKED_UP",
+    "RETURN_COMPLETED",
+    "MESSAGE_SENT",
+    "MESSAGE_RECEIVED",
+    "SUPPORT_CONTACTED",
+    "SUPPORT_RESPONSE",
+    "NO_EVENT"
+  ],
+  "canonical_class_distribution": {
+    "UNMAPPED_LEGACY": 110,
+    "RETURN_PICKED_UP": 25,
+    "MESSAGE_RECEIVED": 25,
+    "NO_EVENT": 35,
+    "REFUND_REQUESTED": 25,
+    "REFUND_INITIATED": 25,
+    "ITEM_SHIPPED": 47,
+    "RETURN_REQUESTED": 47,
+    "ITEM_DELIVERED": 69,
+    "PAYMENT_FAILED": 25,
+    "MESSAGE_SENT": 25,
+    "PAYMENT_MADE": 25,
+    "REFUND_COMPLETED": 25,
+    "ORDER_CANCELLED": 25,
+    "SUPPORT_CONTACTED": 25,
+    "RETURN_COMPLETED": 25,
+    "ORDER_PLACED": 25,
+    "DELIVERY_ATTEMPTED": 25,
+    "SUPPORT_RESPONSE": 25,
+    "REFUND_FAILED": 25
+  },
+  "per_split_canonical_distribution": {
+    "train": {
+      "UNMAPPED_LEGACY": 75,
+      "RETURN_PICKED_UP": 18,
+      "MESSAGE_RECEIVED": 18,
+      "NO_EVENT": 24,
+      "REFUND_REQUESTED": 18,
+      "REFUND_INITIATED": 18,
+      "ITEM_SHIPPED": 33,
+      "RETURN_REQUESTED": 33,
+      "ITEM_DELIVERED": 48,
+      "PAYMENT_FAILED": 18,
+      "MESSAGE_SENT": 18,
+      "PAYMENT_MADE": 18,
+      "REFUND_COMPLETED": 18,
+      "ORDER_CANCELLED": 18,
+      "SUPPORT_CONTACTED": 18,
+      "RETURN_COMPLETED": 18,
+      "ORDER_PLACED": 18,
+      "DELIVERY_ATTEMPTED": 18,
+      "SUPPORT_RESPONSE": 18,
+      "REFUND_FAILED": 18
+    },
+    "val": {
+      "REFUND_COMPLETED": 4,
+      "MESSAGE_SENT": 4,
+      "ITEM_SHIPPED": 7,
+      "UNMAPPED_LEGACY": 15,
+      "NO_EVENT": 5,
+      "RETURN_REQUESTED": 7,
+      "SUPPORT_RESPONSE": 4,
+      "REFUND_FAILED": 4,
+      "SUPPORT_CONTACTED": 4,
+      "REFUND_REQUESTED": 4,
+      "ITEM_DELIVERED": 10,
+      "PAYMENT_MADE": 4,
+      "PAYMENT_FAILED": 4,
+      "DELIVERY_ATTEMPTED": 4,
+      "ORDER_CANCELLED": 4,
+      "ORDER_PLACED": 4,
+      "RETURN_PICKED_UP": 4,
+      "MESSAGE_RECEIVED": 4,
+      "RETURN_COMPLETED": 4,
+      "REFUND_INITIATED": 4
+    },
+    "test": {
+      "MESSAGE_SENT": 3,
+      "REFUND_COMPLETED": 3,
+      "REFUND_FAILED": 3,
+      "SUPPORT_CONTACTED": 3,
+      "UNMAPPED_LEGACY": 20,
+      "ORDER_PLACED": 3,
+      "NO_EVENT": 6,
+      "RETURN_COMPLETED": 3,
+      "RETURN_REQUESTED": 7,
+      "ITEM_SHIPPED": 7,
+      "REFUND_REQUESTED": 3,
+      "SUPPORT_RESPONSE": 3,
+      "ITEM_DELIVERED": 11,
+      "PAYMENT_MADE": 3,
+      "ORDER_CANCELLED": 3,
+      "DELIVERY_ATTEMPTED": 3,
+      "RETURN_PICKED_UP": 3,
+      "MESSAGE_RECEIVED": 3,
+      "PAYMENT_FAILED": 3,
+      "REFUND_INITIATED": 3
+    }
+  },
+  "raw_class_distribution": {
+    "REFUND_RECEIVED": 22,
+    "RETURN_PICKED_UP": 25,
+    "MESSAGE_RECEIVED": 25,
+    "NO_EVENT": 35,
+    "REFUND_REQUESTED": 25,
+    "REFUND_INITIATED": 25,
+    "CHARGEBACK_REQUESTED": 22,
+    "ITEM_SHIPPED": 25,
+    "RETURN_INITIATED": 22,
+    "ORDER_DELIVERED": 22,
+    "PAYMENT_FAILED": 25,
+    "REFUND_PROCESSED": 22,
+    "MESSAGE_SENT": 25,
+    "PAYMENT_MADE": 25,
+    "REFUND_APPROVED": 22,
+    "DISPUTE_OPENED": 22,
+    "REFUND_COMPLETED": 25,
+    "ORDER_CANCELLED": 25,
+    "SUPPORT_CONTACTED": 25,
+    "RETURN_COMPLETED": 25,
+    "ORDER_PLACED": 25,
+    "RETURN_REQUESTED": 25,
+    "ITEM_DELIVERED": 25,
+    "DELIVERY_ATTEMPTED": 25,
+    "SUPPORT_RESPONSE": 25,
+    "ORDER_SHIPPED": 22,
+    "ITEM_RECEIVED": 22,
+    "REFUND_FAILED": 25
+  },
+  "mapping_directory": {
+    "ORDER_PLACED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "ORDER_PLACED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing order placement or confirmation.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "PAYMENT_MADE": {
+      "category": "CANONICAL",
+      "canonical_event_type": "PAYMENT_MADE",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing successful debit or payment settlement.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "PAYMENT_FAILED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "PAYMENT_FAILED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing payment rejection or failure.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "REFUND_REQUESTED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "REFUND_REQUESTED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing customer claim or refund demand.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "REFUND_INITIATED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "REFUND_INITIATED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing refund processing start.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "REFUND_COMPLETED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "REFUND_COMPLETED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing successful refund payout / ledger credit.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "REFUND_FAILED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "REFUND_FAILED",
+      "is_canonical": true,
+      "justification": "Approved canonical commerce event representing refund rejection or reversal failure.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "ORDER_CANCELLED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "ORDER_CANCELLED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing order cancellation or voiding.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "ITEM_SHIPPED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "ITEM_SHIPPED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing dispatch or handover to courier.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "DELIVERY_ATTEMPTED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "DELIVERY_ATTEMPTED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing failed or attempted courier drop-off.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "ITEM_DELIVERED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "ITEM_DELIVERED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing final receipt or verified parcel drop.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "RETURN_REQUESTED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "RETURN_REQUESTED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing customer return or RMA request.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "RETURN_PICKED_UP": {
+      "category": "CANONICAL",
+      "canonical_event_type": "RETURN_PICKED_UP",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing courier return item collection.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "RETURN_COMPLETED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "RETURN_COMPLETED",
+      "is_canonical": true,
+      "justification": "Approved canonical delivery event representing return item warehouse receipt / inspection.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "MESSAGE_SENT": {
+      "category": "CANONICAL",
+      "canonical_event_type": "MESSAGE_SENT",
+      "is_canonical": true,
+      "justification": "Approved canonical communication event representing outbound message dispatch.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "MESSAGE_RECEIVED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "MESSAGE_RECEIVED",
+      "is_canonical": true,
+      "justification": "Approved canonical communication event representing inbound message receipt.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "SUPPORT_CONTACTED": {
+      "category": "CANONICAL",
+      "canonical_event_type": "SUPPORT_CONTACTED",
+      "is_canonical": true,
+      "justification": "Approved canonical communication event representing escalation or customer support ticket opening.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "SUPPORT_RESPONSE": {
+      "category": "CANONICAL",
+      "canonical_event_type": "SUPPORT_RESPONSE",
+      "is_canonical": true,
+      "justification": "Approved canonical communication event representing agent support reply or ticket update.",
+      "recommended_training_action": "Direct canonical training target."
+    },
+    "ORDER_SHIPPED": {
+      "category": "COMPATIBILITY_ALIAS",
+      "canonical_event_type": "ITEM_SHIPPED",
+      "is_canonical": true,
+      "justification": "Direct synonym for package dispatch; maps cleanly to ITEM_SHIPPED.",
+      "recommended_training_action": "Map to ITEM_SHIPPED with raw label preserved in sample provenance."
+    },
+    "ORDER_DELIVERED": {
+      "category": "COMPATIBILITY_ALIAS",
+      "canonical_event_type": "ITEM_DELIVERED",
+      "is_canonical": true,
+      "justification": "Direct synonym for package delivery; maps cleanly to ITEM_DELIVERED.",
+      "recommended_training_action": "Map to ITEM_DELIVERED with raw label preserved in sample provenance."
+    },
+    "ITEM_RECEIVED": {
+      "category": "COMPATIBILITY_ALIAS",
+      "canonical_event_type": "ITEM_DELIVERED",
+      "is_canonical": true,
+      "justification": "Recipient confirmation of physical receipt is semantically equivalent to delivery completion.",
+      "recommended_training_action": "Map to ITEM_DELIVERED with raw label preserved in sample provenance."
+    },
+    "RETURN_INITIATED": {
+      "category": "COMPATIBILITY_ALIAS",
+      "canonical_event_type": "RETURN_REQUESTED",
+      "is_canonical": true,
+      "justification": "Buyer initiation of return workflow aligns with RETURN_REQUESTED.",
+      "recommended_training_action": "Map to RETURN_REQUESTED with raw label preserved in sample provenance."
+    },
+    "REFUND_APPROVED": {
+      "category": "LEGACY_DISPUTE",
+      "canonical_event_type": null,
+      "is_canonical": false,
+      "justification": "Administrative authorization milestone prior to financial initiation. Forcing it to REFUND_INITIATED or REFUND_COMPLETED conflates authorization with execution.",
+      "recommended_training_action": "Preserve in dataset provenance as legacy label. Exclude from 18-class classifier loss or assign to auxiliary merchant approval workflow."
+    },
+    "REFUND_PROCESSED": {
+      "category": "LEGACY_DISPUTE",
+      "canonical_event_type": null,
+      "is_canonical": false,
+      "justification": "Gateway transfer execution step. Forcing to REFUND_INITIATED or REFUND_COMPLETED collapses distinct financial gateway states.",
+      "recommended_training_action": "Preserve in dataset provenance as legacy label. Exclude from 18-class classifier loss."
+    },
+    "REFUND_RECEIVED": {
+      "category": "LEGACY_DISPUTE",
+      "canonical_event_type": null,
+      "is_canonical": false,
+      "justification": "Customer credit receipt on bank statement. Collapsing into REFUND_COMPLETED blurs customer-side settlement verification with merchant ledger status.",
+      "recommended_training_action": "Preserve in dataset provenance as legacy label. Exclude from 18-class classifier loss."
+    },
+    "DISPUTE_OPENED": {
+      "category": "LEGACY_DISPUTE",
+      "canonical_event_type": null,
+      "is_canonical": false,
+      "justification": "Formal dispute/claim filing on payment platform. Governed by dispute resolution rules (Track 2 Claims), not standard 3-party commercial fulfillment/communication events.",
+      "recommended_training_action": "Preserve in dataset provenance as dispute domain label. Exclude from 18-class event classifier; train separately in Track 2 Claim/Dispute reasoning."
+    },
+    "CHARGEBACK_REQUESTED": {
+      "category": "LEGACY_DISPUTE",
+      "canonical_event_type": null,
+      "is_canonical": false,
+      "justification": "Cardholder bank chargeback demand. Legal card-network arbitration mechanism, semantically distinct from merchant refund or commercial payment events.",
+      "recommended_training_action": "Preserve in dataset provenance as dispute domain label. Exclude from 18-class event classifier; route to Track 2 Claim/Dispute reasoning."
+    },
+    "NO_EVENT": {
+      "category": "NEGATIVE_SAMPLE",
+      "canonical_event_type": "NO_EVENT",
+      "is_canonical": true,
+      "justification": "Negative non-event text to enforce non-event rejection in binary & multiclass heads.",
+      "recommended_training_action": "Retained as explicit negative class (Class 19) in DeBERTa classifier."
+    }
+  }
+}

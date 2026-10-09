@@ -1,0 +1,104 @@
+{
+  "evaluation_name": "ProofFlow ML Track 4 Event Extraction Benchmark",
+  "benchmark_type": "controlled synthetic benchmark (not representative of production/generalization accuracy)",
+  "sample_count": 10,
+  "event_metrics": {
+    "total_gold_events": 11,
+    "total_extracted_events": 11,
+    "type_true_positives": 11,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "nuance_accuracy": {
+    "negation_accuracy": 1.0,
+    "modality_and_tense_accuracy": 1.0,
+    "argument_binding_accuracy": 1.0
+  },
+  "grounding_invariants": {
+    "grounding_rate": 1.0,
+    "unsupported_event_rate": 0.0,
+    "monetary_exact_decimal_verified": true
+  },
+  "candidate_model_feasibility": {
+    "deterministic_baseline": {
+      "status": "EVALUATED",
+      "environment": "Python 3.13 (Native, Windows)",
+      "dependencies": "Zero external ML weights; linear-time deterministic regexes + EntityMentions"
+    },
+    "deberta_transformer": {
+      "status": "NOT EVALUATED",
+      "reason": "PyTorch / Transformers not installed in runtime virtualenv; requires ~500MB download; GPU unavailable."
+    },
+    "roberta_transformer": {
+      "status": "NOT EVALUATED",
+      "reason": "PyTorch / Transformers not installed in runtime virtualenv; requires ~500MB download; GPU unavailable."
+    },
+    "layoutlmv3_transformer": {
+      "status": "NOT EVALUATED",
+      "reason": "Requires PyTorch, Detectron2, and vision-backbone checkpoint weights (~500MB+); unsupported in lightweight offline test suite."
+    }
+  },
+  "case_eval_details": [
+    {
+      "case_id": "evt_bench_01_normal_payment",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_02_multiple_events",
+      "gold_count": 2,
+      "extracted_count": 2,
+      "matched_count": 2
+    },
+    {
+      "case_id": "evt_bench_03_negation",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_04_future_event",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_05_conditional_event",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_06_uncertain_modal",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_07_missing_arguments",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_08_ocr_noise_case_h",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_09_relative_date_chat",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    },
+    {
+      "case_id": "evt_bench_10_ambiguous_date",
+      "gold_count": 1,
+      "extracted_count": 1,
+      "matched_count": 1
+    }
+  ]
+}

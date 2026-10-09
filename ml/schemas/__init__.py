@@ -8,7 +8,16 @@ from ml.schemas.entity import (
     PhoneNumberValue,
     RelativeTimeResolution,
 )
-from ml.schemas.event import Event, EventType
+from ml.schemas.event import (
+    Event,
+    EventCategory,
+    EventModality,
+    EventPolarity,
+    EventTaxonomyVersion,
+    EventTense,
+    EventTrigger,
+    EventType,
+)
 from ml.schemas.claim import Claim, Modality, EpistemicStatus, SpeakerRole
 from ml.schemas.relationship import Relationship, RelationshipType
 from ml.schemas.finding import Finding, FindingType, InconsistencyTier, ConflictState, CoverageState
@@ -24,6 +33,12 @@ __all__ = [
     "RelativeTimeResolution",
     "Event",
     "EventType",
+    "EventCategory",
+    "EventPolarity",
+    "EventModality",
+    "EventTense",
+    "EventTrigger",
+    "EventTaxonomyVersion",
     "Claim",
     "Modality",
     "EpistemicStatus",

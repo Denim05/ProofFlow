@@ -37,7 +37,7 @@ class FakeAsyncCursor:
         raise StopAsyncIteration
 
 
-class FakeAsyncCasesCollection:
+class FakeAsyncCollection:
     """In-memory asynchronous collection mimicking PyMongo AsyncCollection."""
 
     def __init__(self):
@@ -48,16 +48,82 @@ class FakeAsyncCasesCollection:
         self.documents.append(doc_copy)
         return type("InsertResult", (), {"inserted_id": doc_copy.get("_id", "mock_id")})()
 
+    async def insert_many(self, docs: List[Dict[str, Any]]):
+        for doc in docs:
+            self.documents.append(copy.deepcopy(doc))
+        return type("InsertManyResult", (), {"inserted_ids": [d.get("_id", "mock_id") for d in docs]})()
+
     async def find_one(self, query: Dict[str, Any]):
         for doc in self.documents:
             match = True
             for k, v in query.items():
-                if doc.get(k) != v:
+                if isinstance(v, dict) and "$in" in v:
+                    if doc.get(k) not in v["$in"]:
+                        match = False
+                        break
+                elif doc.get(k) != v:
                     match = False
                     break
             if match:
                 return copy.deepcopy(doc)
         return None
+
+    async def find_one_and_update(self, filter_query: Dict[str, Any], update_query: Dict[str, Any], return_document=False):
+        for doc in self.documents:
+            match = True
+            for k, v in filter_query.items():
+                if isinstance(v, dict) and "$in" in v:
+                    if doc.get(k) not in v["$in"]:
+                        match = False
+                        break
+                elif doc.get(k) != v:
+                    match = False
+                    break
+            if match:
+                old_doc = copy.deepcopy(doc)
+                if "$set" in update_query:
+                    doc.update(copy.deepcopy(update_query["$set"]))
+                if "$inc" in update_query:
+                    for inc_k, inc_v in update_query["$inc"].items():
+                        doc[inc_k] = doc.get(inc_k, 0) + inc_v
+                return copy.deepcopy(doc if return_document else old_doc)
+        return None
+
+    async def update_one(self, filter_query: Dict[str, Any], update_query: Dict[str, Any]):
+        for doc in self.documents:
+            match = True
+            for k, v in filter_query.items():
+                if doc.get(k) != v:
+                    match = False
+                    break
+            if match:
+                if "$set" in update_query:
+                    doc.update(copy.deepcopy(update_query["$set"]))
+                if "$inc" in update_query:
+                    for inc_k, inc_v in update_query["$inc"].items():
+                        doc[inc_k] = doc.get(inc_k, 0) + inc_v
+                return type("UpdateResult", (), {"modified_count": 1})()
+        return type("UpdateResult", (), {"modified_count": 0})()
+
+    async def delete_many(self, query: Dict[str, Any]):
+        initial_len = len(self.documents)
+        new_docs = []
+        for doc in self.documents:
+            match = True
+            for k, v in query.items():
+                if isinstance(v, dict) and "$lt" in v:
+                    if doc.get(k) < v["$lt"]:
+                        continue
+                    else:
+                        match = False
+                        break
+                elif doc.get(k) != v:
+                    match = False
+                    break
+            if not match:
+                new_docs.append(doc)
+        self.documents = new_docs
+        return type("DeleteResult", (), {"deleted_count": initial_len - len(new_docs)})()
 
     def find(self, query: Dict[str, Any]):
         matching = []
@@ -87,11 +153,16 @@ class FakeAsyncCasesCollection:
         return "idx_created"
 
 
+FakeAsyncCasesCollection = FakeAsyncCollection
+
+
 class FakeAsyncDatabase:
     """In-memory database containing simulated collections."""
 
     def __init__(self):
-        self.cases = FakeAsyncCasesCollection()
+        self.cases = FakeAsyncCollection()
+        self.evidence = FakeAsyncCollection()
+        self.events = FakeAsyncCollection()
 
 
 @pytest_asyncio.fixture

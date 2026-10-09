@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = "ProofFlow API"
     SERVICE_VERSION: str = "0.1.0"
 
+    # Evidence storage settings
+    EVIDENCE_STORAGE_DIR: str = "storage/evidence"
+    TEMP_STORAGE_DIR: str = "storage/temp"
+    MAX_EVIDENCE_FILE_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
+
+    # Asynchronous job timeouts
+    JOB_HEARTBEAT_TIMEOUT_SECONDS: int = 600  # 10 minutes
+    JOB_MAX_TIMEOUT_SECONDS: int = 1800  # 30 minutes
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",

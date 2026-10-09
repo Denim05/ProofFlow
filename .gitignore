@@ -60,3 +60,13 @@ coverage/
 *~
 .DS_Store
 Thumbs.db
+
+# ML Checkpoints & Models
+ml/checkpoints/
+ml/models/
+ml-training/
+.cache/
+*.pt
+*.pth
+*.bin
+*.safetensors
