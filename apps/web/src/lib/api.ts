@@ -45,6 +45,25 @@ const API_BASE_URL =
 const DEV_USER_ID =
   process.env.NEXT_PUBLIC_DEV_USER_ID || "dev_user_default";
 
+export type TokenGetter = () => Promise<string | null>;
+
+let activeTokenGetter: TokenGetter | null = null;
+
+export function registerAuthTokenGetter(getter: TokenGetter | null): void {
+  activeTokenGetter = getter;
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  if (activeTokenGetter) {
+    try {
+      return await activeTokenGetter();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
 }
@@ -68,10 +87,17 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   const requestHeaders = new Headers(headers);
 
-  // In development, pass dev identity header accepted by backend
-  if (process.env.NODE_ENV !== "production") {
-    if (!requestHeaders.has("X-User-ID")) {
-      requestHeaders.set("X-User-ID", DEV_USER_ID);
+  // Attach bearer token if authenticated session is present and targeting API
+  const isApiRequest = url.startsWith(API_BASE_URL);
+  if (isApiRequest && !requestHeaders.has("Authorization")) {
+    const token = await getAuthToken();
+    if (token) {
+      requestHeaders.set("Authorization", `Bearer ${token}`);
+    } else if (process.env.NODE_ENV !== "production") {
+      // In development, pass dev identity header accepted by backend dev bypass
+      if (!requestHeaders.has("X-User-ID")) {
+        requestHeaders.set("X-User-ID", DEV_USER_ID);
+      }
     }
   }
 
@@ -168,11 +194,14 @@ export const api = {
 
     // If onProgress is supplied and XMLHttpRequest is available in browser
     if (onProgress && typeof XMLHttpRequest !== "undefined") {
+      const token = await getAuthToken();
       return new Promise<EvidenceUploadResponse>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", url);
 
-        if (process.env.NODE_ENV !== "production") {
+        if (token) {
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        } else if (process.env.NODE_ENV !== "production") {
           xhr.setRequestHeader("X-User-ID", DEV_USER_ID);
         }
         xhr.setRequestHeader("Accept", "application/json");

@@ -36,12 +36,46 @@ def test_production_fails_without_secure_secrets():
         )
 
 
+def test_production_fails_without_auth_config():
+    """Verify that production mode strictly requires valid CLERK_ISSUER and CLERK_JWKS_URL."""
+    with pytest.raises(ValueError, match="Production environment requires a valid non-empty CLERK_ISSUER"):
+        Settings(
+            ENVIRONMENT="production",
+            MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
+            API_SECRET_KEY="super_secure_production_secret_key_12345",
+        )
+
+    with pytest.raises(ValueError, match="Production environment strictly prohibits ALLOW_DEV_AUTH_BYPASS"):
+        Settings(
+            ENVIRONMENT="production",
+            MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
+            API_SECRET_KEY="super_secure_production_secret_key_12345",
+            CLERK_ISSUER="https://clerk.example.com",
+            CLERK_JWKS_URL="https://clerk.example.com/.well-known/jwks.json",
+            ALLOW_DEV_AUTH_BYPASS=True,
+        )
+
+    with pytest.raises(ValueError, match="Production environment prohibits localhost"):
+        Settings(
+            ENVIRONMENT="production",
+            MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
+            API_SECRET_KEY="super_secure_production_secret_key_12345",
+            CLERK_ISSUER="http://localhost:8080",
+            CLERK_JWKS_URL="http://localhost:8080/jwks.json",
+        )
+
+
 def test_production_succeeds_with_valid_config():
     """Verify that production mode succeeds with compliant configuration."""
     cfg = Settings(
         ENVIRONMENT="production",
         MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
         API_SECRET_KEY="super_secure_production_secret_key_12345",
+        CLERK_ISSUER="https://clerk.example.com",
+        CLERK_JWKS_URL="https://clerk.example.com/.well-known/jwks.json",
     )
     assert cfg.ENVIRONMENT == "production"
     assert cfg.MONGODB_DATABASE == "proofflow_dev"
+    assert cfg.CLERK_ISSUER == "https://clerk.example.com"
+    assert cfg.CLERK_JWKS_URL == "https://clerk.example.com/.well-known/jwks.json"
+    assert cfg.ALLOW_DEV_AUTH_BYPASS is False

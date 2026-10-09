@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { SignedIn, SignedOut, UserButton, SignInButton } from "@clerk/nextjs";
 import { Shield, Activity, Database, CheckCircle2, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -65,11 +66,30 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Dev user badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700">
-            <Activity className="w-3.5 h-3.5 text-indigo-500" />
-            <span>dev_user_default</span>
-          </div>
+          {/* Clerk Authentication Controls */}
+          <SignedIn>
+            <div className="flex items-center gap-3">
+              {process.env.NODE_ENV !== "production" && (
+                <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-[11px] font-medium text-amber-700">
+                  <Activity className="w-3 h-3 text-amber-500" />
+                  <span>Dev Mode</span>
+                </div>
+              )}
+              <UserButton afterSignOutUrl="/sign-in" />
+            </div>
+          </SignedIn>
+          <SignedOut>
+            <div className="flex items-center gap-2">
+              <SignInButton mode="modal">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition"
+                >
+                  Sign In
+                </button>
+              </SignInButton>
+            </div>
+          </SignedOut>
         </div>
       </div>
     </header>

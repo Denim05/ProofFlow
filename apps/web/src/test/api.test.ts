@@ -125,4 +125,56 @@ describe("ProofFlow API Client", () => {
     expect(capturedUrl).toContain("page=2");
     expect(capturedUrl).toContain("limit=10");
   });
+
+  it("attaches Authorization Bearer token when token getter is registered", async () => {
+    const { registerAuthTokenGetter } = await import("@/lib/api");
+    registerAuthTokenGetter(async () => "mock_clerk_session_jwt_xyz");
+
+    let capturedHeaders: Headers | undefined;
+    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Headers;
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: { items: [], pagination: { page: 1, limit: 10, total: 0, pages: 0 } },
+          }),
+      });
+    });
+
+    await api.listCases();
+    expect(capturedHeaders?.get("Authorization")).toBe("Bearer mock_clerk_session_jwt_xyz");
+
+    // Clean up
+    registerAuthTokenGetter(null);
+  });
+
+  it("handles token getter rejection gracefully without crashing request", async () => {
+    const { registerAuthTokenGetter } = await import("@/lib/api");
+    registerAuthTokenGetter(async () => {
+      throw new Error("Clerk session expired");
+    });
+
+    let capturedHeaders: Headers | undefined;
+    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Headers;
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: { items: [], pagination: { page: 1, limit: 10, total: 0, pages: 0 } },
+          }),
+      });
+    });
+
+    await api.listCases();
+    expect(capturedHeaders?.get("Authorization")).toBeNull();
+
+    // Clean up
+    registerAuthTokenGetter(null);
+  });
 });

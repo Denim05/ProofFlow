@@ -1,28 +1,56 @@
 from typing import Optional
 from fastapi import Header, HTTPException, status
 from pymongo.asynchronous.database import AsyncDatabase
+from app.core.auth import verify_clerk_token
 from app.core.config import settings
 from app.core.database import get_database
 
 
 def get_current_user_id(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
 ) -> str:
-    """Resolves the tenant user identifier with strict environment isolation.
+    """Resolves the verified tenant user identifier with cryptographic token verification.
 
-    In development/testing environments, supports 'X-User-ID' header injection
-    or falls back to 'dev_user_default' for local ergonomics.
-    In production environments, strictly rejects unauthenticated requests and
-    requires a valid user identity.
+    Rules:
+    1. If 'Authorization: Bearer <token>' is present:
+       - Cryptographically verifies the RS256 token against Clerk JWKS.
+       - Returns the verified subject claim ('sub').
+       - Any supplied 'X-User-ID' header is strictly ignored and cannot override token identity.
+    2. If 'Authorization' header is absent or does not contain a Bearer token:
+       - In production, strictly rejects with HTTP 401 Unauthorized.
+       - In non-production (development/test):
+         - If ALLOW_DEV_AUTH_BYPASS is True, allows 'X-User-ID' (falling back to 'dev_user_default').
+         - If ALLOW_DEV_AUTH_BYPASS is False, rejects with HTTP 401 Unauthorized.
     """
-    if settings.ENVIRONMENT.lower() == "production":
+    is_prod = settings.ENVIRONMENT.lower() == "production"
+
+    if authorization and authorization.strip():
+        auth_parts = authorization.strip().split(maxsplit=1)
+        if len(auth_parts) != 2 or auth_parts[0].lower() != "bearer" or not auth_parts[1].strip():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization header: expected format 'Bearer <token>'.",
+            )
+        token = auth_parts[1].strip()
+        claims = verify_clerk_token(token)
+        return claims["sub"]
+
+    # No Bearer token provided
+    if is_prod:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Production authentication required: client-supplied X-User-ID header is prohibited. Configure authenticated identity provider / API gateway.",
+            detail="Production authentication required: missing Bearer token.",
         )
 
-    # Non-production development / test fallback
-    return x_user_id.strip() if x_user_id and x_user_id.strip() else "dev_user_default"
+    # In development/testing, check explicit bypass flag
+    if settings.ALLOW_DEV_AUTH_BYPASS:
+        return x_user_id.strip() if x_user_id and x_user_id.strip() else "dev_user_default"
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required: missing Bearer token. Set ALLOW_DEV_AUTH_BYPASS=true to enable development identity injection.",
+    )
 
 
 def get_db() -> AsyncDatabase:

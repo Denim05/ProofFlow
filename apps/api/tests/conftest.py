@@ -2,6 +2,7 @@ import copy
 from typing import Any, Dict, List, Optional
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from app.core.config import settings
 from app.core.dependencies import get_db
 from app.main import app
 
@@ -156,11 +157,22 @@ async def fake_db():
     return FakeAsyncDatabase()
 
 
+@pytest_asyncio.fixture(autouse=True)
+def setup_test_auth_bypass():
+    """Automatically enables dev auth bypass for test suite unless overridden by a test."""
+    orig_bypass = settings.ALLOW_DEV_AUTH_BYPASS
+    settings.ALLOW_DEV_AUTH_BYPASS = True
+    yield
+    settings.ALLOW_DEV_AUTH_BYPASS = orig_bypass
+
+
 @pytest_asyncio.fixture
 async def client(fake_db):
     """Provides an HTTPX AsyncClient with the database dependency overridden with in-memory store."""
     app.dependency_overrides[get_db] = lambda: fake_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+    finally:
+        app.dependency_overrides.clear()
