@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.schemas.case import PaginationMeta
 
 
@@ -27,12 +27,23 @@ class EventResponse(BaseModel):
     amount_value: Optional[Decimal] = None
     order_reference: Optional[str] = None
     transaction_reference: Optional[str] = None
-    polarity: str
-    modality: str
-    tense: str
-    model_confidence: float
+    polarity: str = "POSITIVE"
+    modality: str = "ASSERTED"
+    tense: str = "PAST"
+    model_confidence: float = 1.0
     model_metadata: Dict[str, Any] = {}
     created_at: datetime
+
+    @field_validator("amount_value", mode="before")
+    @classmethod
+    def parse_amount_value(cls, v: Any) -> Optional[Decimal]:
+        if v is None:
+            return None
+        if hasattr(v, "to_decimal"):
+            return v.to_decimal()
+        if isinstance(v, Decimal):
+            return v
+        return Decimal(str(v))
 
 
 class EventListResponse(BaseModel):

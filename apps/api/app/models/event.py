@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def generate_event_id() -> str:
@@ -54,3 +54,14 @@ class EventDocument(BaseModel):
         "use_enum_values": True,
         "populate_by_name": True,
     }
+
+    @field_validator("amount_value", mode="before")
+    @classmethod
+    def parse_amount_value(cls, v: Any) -> Optional[Decimal]:
+        if v is None:
+            return None
+        if hasattr(v, "to_decimal"):
+            return v.to_decimal()
+        if isinstance(v, Decimal):
+            return v
+        return Decimal(str(v))

@@ -191,9 +191,12 @@ class EvidenceProcessingService:
                     modality=mod_val,
                     tense=tense_val,
                     model_confidence=ev.confidence,
-                    model_metadata=ev.model_metadata,
-                )
-                staged_events.append(event_doc.model_dump())
+                    )
+                doc_dict = event_doc.model_dump()
+                if doc_dict.get("amount_value") is not None:
+                    from bson import Decimal128
+                    doc_dict["amount_value"] = Decimal128(str(doc_dict["amount_value"]))
+                staged_events.append(doc_dict)
 
             # 1. Commit staged events under unique run_id and target_version
             if staged_events:
