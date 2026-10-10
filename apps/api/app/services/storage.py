@@ -1,7 +1,8 @@
 import hashlib
 import os
+import time
 import uuid
-from typing import Tuple
+from typing import Optional, Tuple
 from fastapi import HTTPException, UploadFile, status
 import pymupdf
 
@@ -25,6 +26,7 @@ class LocalStorageService:
     def __init__(self):
         self.storage_root = os.path.abspath(settings.EVIDENCE_STORAGE_DIR)
         self.temp_root = os.path.abspath(settings.TEMP_STORAGE_DIR)
+        self._active_temp_paths: set = set()
         os.makedirs(self.storage_root, exist_ok=True)
         os.makedirs(self.temp_root, exist_ok=True)
 
@@ -60,9 +62,11 @@ class LocalStorageService:
                 detail=f"Unsupported file extension '{ext}'. Allowed extensions: {sorted(ALLOWED_EXTENSIONS)}",
             )
 
-        # Generate temporary staging path
+        # Generate temporary staging path and register active in-flight upload
         temp_filename = f"{uuid.uuid4().hex}.tmp"
         temp_path = os.path.join(self.temp_root, temp_filename)
+        abs_temp_path = os.path.abspath(temp_path)
+        self._active_temp_paths.add(abs_temp_path)
 
         hasher = hashlib.sha256()
         bytes_read = 0
@@ -171,6 +175,7 @@ class LocalStorageService:
             return rel_path, detected_mime, bytes_read, sha256
 
         finally:
+            self._active_temp_paths.discard(abs_temp_path)
             # Guarantee removal of temporary staging file on failure or success
             if os.path.exists(temp_path):
                 import gc
@@ -197,6 +202,75 @@ class LocalStorageService:
                 os.remove(full_path)
             except OSError:
                 pass
+
+    def cleanup_abandoned_temp_files(
+        self,
+        max_age_seconds: int = 3600,
+        now: Optional[float] = None,
+    ) -> int:
+        """Safely cleans up abandoned upload temporary files older than max_age_seconds.
+
+        Security guarantees:
+        - Only inspects the configured temp_root directory (never storage_root).
+        - Strictly filters for files ending with '.tmp' created by the staging pipeline.
+        - Preserves fresh/active upload temporary files (newer than cutoff).
+        - Preserves non-.tmp files and all permanent evidence files.
+        - Handles missing directories and filesystem errors gracefully without crashing.
+        - Path traversal safe: verifies each file resides directly inside temp_root.
+
+        Returns:
+            int: Number of stale temporary files successfully deleted.
+        """
+        if not os.path.exists(self.temp_root):
+            return 0
+
+        current_time = now if now is not None else time.time()
+        cutoff_time = current_time - max(0, max_age_seconds)
+        deleted_count = 0
+
+        try:
+            from pathlib import Path
+            temp_root_path = Path(self.temp_root).resolve()
+
+            with os.scandir(self.temp_root) as entries:
+                for entry in entries:
+                    try:
+                        # Only target regular files ending in .tmp
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        if not entry.name.endswith(".tmp"):
+                            continue
+
+                        # Verify path containment within temp_root
+                        resolved_entry = Path(entry.path).resolve()
+                        if not resolved_entry.is_relative_to(temp_root_path):
+                            continue
+
+                        # Never delete active in-flight uploads even if modification time is old
+                        if str(resolved_entry) in self._active_temp_paths:
+                            logger.debug("Skipping active in-flight temporary upload: %s", entry.name)
+                            continue
+
+                        stat_info = entry.stat(follow_symlinks=False)
+                        # Check modification time against cutoff
+                        if stat_info.st_mtime <= cutoff_time:
+                            try:
+                                os.remove(entry.path)
+                                deleted_count += 1
+                                logger.debug("Deleted stale temp file: %s", entry.name)
+                            except FileNotFoundError:
+                                pass
+                            except OSError as err:
+                                logger.warning("Could not remove stale temp file %s: %s", entry.name, err)
+                    except (FileNotFoundError, PermissionError):
+                        continue
+                    except Exception as err:
+                        logger.warning("Error inspecting temp entry %s: %s", entry.name, err)
+                        continue
+        except Exception as exc:
+            logger.warning("Error scanning temp directory for cleanup: %s", exc)
+
+        return deleted_count
 
 
 storage_service = LocalStorageService()

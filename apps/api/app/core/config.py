@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     JOB_HEARTBEAT_TIMEOUT_SECONDS: int = 600  # 10 minutes
     JOB_MAX_TIMEOUT_SECONDS: int = 1800  # 30 minutes
 
+    # Rate limiting settings
+    RATE_LIMIT_EVIDENCE_UPLOAD_PER_MINUTE: int = 30
+    RATE_LIMIT_DOSSIER_PDF_PER_MINUTE: int = 10
+    TRUSTED_PROXIES: Union[List[str], str] = []
+
     # Authentication & JWT verification settings
     CLERK_ISSUER: Optional[str] = None
     CLERK_JWKS_URL: Optional[str] = None
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     AUTH_JWKS_TIMEOUT_SECONDS: int = 10
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../../.env"),
+        env_file=("apps/api/.env", ".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -56,6 +61,15 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, value: Union[List[str], str]) -> List[str]:
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("TRUSTED_PROXIES", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, value: Union[List[str], str, None]) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [p.strip() for p in value.split(",") if p.strip()]
         return value
 
     @field_validator("CLERK_AUTHORIZED_PARTIES", mode="before")
@@ -71,6 +85,20 @@ class Settings(BaseSettings):
     def derive_jwks_url(self) -> "Settings":
         if self.CLERK_ISSUER and not self.CLERK_JWKS_URL:
             self.CLERK_JWKS_URL = f"{self.CLERK_ISSUER.rstrip('/')}/.well-known/jwks.json"
+        return self
+
+    @model_validator(mode="after")
+    def validate_dev_auth_bypass_environment(self) -> "Settings":
+        allowed_bypass_envs = {"development", "test"}
+        env = (self.ENVIRONMENT or "").strip().lower()
+        if self.ALLOW_DEV_AUTH_BYPASS and env not in allowed_bypass_envs:
+            if env == "production":
+                prefix = "Production environment strictly prohibits ALLOW_DEV_AUTH_BYPASS."
+            else:
+                prefix = f"ALLOW_DEV_AUTH_BYPASS is strictly prohibited in '{self.ENVIRONMENT or 'unset'}' environment."
+            raise ValueError(
+                f"{prefix} It is only permitted in {sorted(allowed_bypass_envs)}."
+            )
         return self
 
     @model_validator(mode="after")

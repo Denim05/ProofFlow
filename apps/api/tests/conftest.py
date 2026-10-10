@@ -150,6 +150,7 @@ class FakeAsyncDatabase:
         self.cases = FakeAsyncCollection()
         self.evidence = FakeAsyncCollection()
         self.events = FakeAsyncCollection()
+        self.finding_reviews = FakeAsyncCollection()
 
 
 @pytest_asyncio.fixture

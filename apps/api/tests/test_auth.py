@@ -21,6 +21,15 @@ TEST_AUDIENCE = "proofflow-api"
 TEST_AZP = "http://localhost:3000"
 
 
+@pytest.fixture(autouse=True)
+def setup_auth_test_settings(monkeypatch):
+    """Ensure tests in test_auth.py use mock Clerk settings regardless of local .env files."""
+    monkeypatch.setattr(settings, "CLERK_ISSUER", TEST_ISSUER)
+    monkeypatch.setattr(settings, "CLERK_JWKS_URL", f"{TEST_ISSUER}/.well-known/jwks.json")
+    monkeypatch.setattr(settings, "CLERK_AUDIENCE", TEST_AUDIENCE)
+    monkeypatch.setattr(settings, "CLERK_AUTHORIZED_PARTIES", [TEST_AZP])
+
+
 class MockPyJWK:
     def __init__(self, key, key_id=TEST_KEY_ID):
         self.key = key

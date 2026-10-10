@@ -17,6 +17,25 @@ from app.core.logging import logger
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manages application startup and graceful shutdown."""
     logger.info("ProofFlow API starting up...")
+
+    # Fail-closed authentication check
+    allowed_bypass_envs = {"development", "test"}
+    env = (settings.ENVIRONMENT or "").strip().lower()
+    if settings.ALLOW_DEV_AUTH_BYPASS and env not in allowed_bypass_envs:
+        raise RuntimeError(
+            f"Fatal application startup failure: ALLOW_DEV_AUTH_BYPASS is strictly prohibited in '{settings.ENVIRONMENT or 'unset'}' environment. "
+            f"It is only permitted in {sorted(allowed_bypass_envs)}."
+        )
+
+    # Safe abandoned temporary file cleanup (files older than 1 hour)
+    try:
+        from app.services.storage import storage_service
+        deleted_count = storage_service.cleanup_abandoned_temp_files(max_age_seconds=3600)
+        if deleted_count > 0:
+            logger.info("Cleaned up %d abandoned upload temporary file(s).", deleted_count)
+    except Exception as exc:
+        logger.warning("Temporary upload directory cleanup encountered an error during startup: %s", exc)
+
     await connect_to_mongo()
     try:
         yield
@@ -40,6 +59,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         404: "NOT_FOUND",
         401: "UNAUTHORIZED",
         403: "FORBIDDEN",
+        429: "TOO_MANY_REQUESTS",
         503: "SERVICE_UNAVAILABLE",
     }
     error_code = code_map.get(exc.status_code, "HTTP_ERROR")
@@ -55,6 +75,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
+        headers=exc.headers,
     )
 
 

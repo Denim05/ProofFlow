@@ -18,12 +18,12 @@ def get_current_user_id(
        - Returns the verified subject claim ('sub').
        - Any supplied 'X-User-ID' header is strictly ignored and cannot override token identity.
     2. If 'Authorization' header is absent or does not contain a Bearer token:
-       - In production, strictly rejects with HTTP 401 Unauthorized.
-       - In non-production (development/test):
-         - If ALLOW_DEV_AUTH_BYPASS is True, allows 'X-User-ID' (falling back to 'dev_user_default').
-         - If ALLOW_DEV_AUTH_BYPASS is False, rejects with HTTP 401 Unauthorized.
+       - Only permitted in explicitly configured 'development' or 'test' environments with ALLOW_DEV_AUTH_BYPASS=true.
+       - In 'staging', 'production', an unset environment, or any unknown environment, strictly rejects with HTTP 401 Unauthorized.
     """
-    is_prod = settings.ENVIRONMENT.lower() == "production"
+    allowed_bypass_envs = {"development", "test"}
+    env = (settings.ENVIRONMENT or "").strip().lower()
+    is_dev_or_test = env in allowed_bypass_envs
 
     if authorization and authorization.strip():
         auth_parts = authorization.strip().split(maxsplit=1)
@@ -37,19 +37,23 @@ def get_current_user_id(
         return claims["sub"]
 
     # No Bearer token provided
-    if is_prod:
+    if not is_dev_or_test:
+        if env == "production":
+            detail = "Production authentication required: missing Bearer token."
+        else:
+            detail = f"Authentication required: Bearer token is required in '{settings.ENVIRONMENT or 'unset'}' environment."
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Production authentication required: missing Bearer token.",
+            detail=detail,
         )
 
-    # In development/testing, check explicit bypass flag
+    # In development/test, check explicit bypass flag
     if settings.ALLOW_DEV_AUTH_BYPASS:
         return x_user_id.strip() if x_user_id and x_user_id.strip() else "dev_user_default"
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required: missing Bearer token. Set ALLOW_DEV_AUTH_BYPASS=true to enable development identity injection.",
+        detail="Authentication required: missing Bearer token. Set ALLOW_DEV_AUTH_BYPASS=true in development or test environment to enable development identity injection.",
     )
 
 

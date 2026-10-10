@@ -12,6 +12,7 @@ from fastapi import (
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.dependencies import get_current_user_id, get_db
+from app.models.case import CaseStatus
 from app.models.common import utc_now
 from app.models.evidence import (
     EvidenceDocument,
@@ -29,6 +30,7 @@ from app.services.evidence_processor import (
     ProcessingJob,
     evidence_processing_service,
 )
+from app.core.rate_limiter import rate_limit_evidence_upload
 from app.services.storage import storage_service
 
 router = APIRouter(prefix="/cases/{case_id}/evidence", tags=["evidence"])
@@ -45,7 +47,12 @@ async def _verify_case_ownership(case_id: str, user_id: str, db: AsyncDatabase) 
     return case_row
 
 
-@router.post("", response_model=APIResponse[EvidenceUploadResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=APIResponse[EvidenceUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_evidence_upload)],
+)
 async def upload_evidence(
     case_id: str,
     file: UploadFile,
@@ -133,6 +140,12 @@ async def upload_evidence(
                 )
                 return APIResponse(data=upload_data)
         raise exc
+
+    # Transition parent case to PROCESSING upon evidence upload
+    await db.cases.update_one(
+        {"case_id": case_id},
+        {"$set": {"status": CaseStatus.PROCESSING.value, "updated_at": utc_now()}},
+    )
 
     # Dispatch background extraction job
     job = ProcessingJob(
@@ -274,6 +287,12 @@ async def retry_evidence_processing(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot retry evidence with status '{row['status']}'. Allowed statuses: {allowed_retry_statuses}",
         )
+
+    # Transition parent case to PROCESSING upon retry dispatch
+    await db.cases.update_one(
+        {"case_id": case_id},
+        {"$set": {"status": CaseStatus.PROCESSING.value, "updated_at": utc_now()}},
+    )
 
     job = ProcessingJob(
         evidence_id=evidence_id,

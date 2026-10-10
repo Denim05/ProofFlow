@@ -178,6 +178,29 @@ async def init_db_indexes(db: Optional[AsyncDatabase] = None) -> None:
             name="idx_events_evidence_run",
         )
 
+        # Finding Reviews Collection Indexes
+        await target_db.finding_reviews.create_index(
+            [("review_id", pymongo.ASCENDING)],
+            unique=True,
+            name="idx_reviews_review_id_unique",
+        )
+        await target_db.finding_reviews.create_index(
+            [
+                ("case_id", pymongo.ASCENDING),
+                ("finding_id", pymongo.ASCENDING),
+                ("is_active", pymongo.ASCENDING),
+            ],
+            name="idx_reviews_case_finding_active",
+        )
+        await target_db.finding_reviews.create_index(
+            [("case_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)],
+            name="idx_reviews_case_created",
+        )
+        await target_db.finding_reviews.create_index(
+            [("finding_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)],
+            name="idx_reviews_finding_created",
+        )
+
         logger.info("MongoDB collection indexes initialized successfully.")
     except Exception as exc:
         logger.warning("Could not initialize MongoDB indexes: %s", str(exc))

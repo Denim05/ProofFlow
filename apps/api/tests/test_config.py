@@ -40,6 +40,7 @@ def test_production_fails_without_auth_config():
     """Verify that production mode strictly requires valid CLERK_ISSUER and CLERK_JWKS_URL."""
     with pytest.raises(ValueError, match="Production environment requires a valid non-empty CLERK_ISSUER"):
         Settings(
+            _env_file=None,
             ENVIRONMENT="production",
             MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
             API_SECRET_KEY="super_secure_production_secret_key_12345",
@@ -47,6 +48,7 @@ def test_production_fails_without_auth_config():
 
     with pytest.raises(ValueError, match="Production environment strictly prohibits ALLOW_DEV_AUTH_BYPASS"):
         Settings(
+            _env_file=None,
             ENVIRONMENT="production",
             MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
             API_SECRET_KEY="super_secure_production_secret_key_12345",
@@ -57,6 +59,7 @@ def test_production_fails_without_auth_config():
 
     with pytest.raises(ValueError, match="Production environment prohibits localhost"):
         Settings(
+            _env_file=None,
             ENVIRONMENT="production",
             MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net",
             API_SECRET_KEY="super_secure_production_secret_key_12345",
