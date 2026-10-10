@@ -349,6 +349,7 @@ async def test_events_retrieval_endpoints(client: AsyncClient, fake_db):
     assert items[0]["case_id"] == case_id
     assert items[0]["evidence_id"] == evidence_id
     assert items[0]["decision_state"] in ("VALIDATED", "REVIEW_NEEDED")
+    assert "temporal_information" in items[0]
 
     # 3. Test GET /cases/{case_id}/evidence/{evidence_id}/events
     evi_events_res = await client.get(
@@ -1202,4 +1203,37 @@ async def test_storage_path_traversal_prevention():
         storage_service._resolve_safe_path("../../../etc/passwd")
     assert exc_info.value.status_code == 400
     assert "traversal prohibited" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_event_response_serializes_temporal_information(client: AsyncClient, fake_db):
+    """Regression test: Verifies that EventResponse preserves and serializes temporal_information."""
+    from app.schemas.event import EventResponse
+    from datetime import datetime, timezone
+
+    event_payload = {
+        "event_id": "evt_test_temporal_1",
+        "case_id": "case_temp_1",
+        "evidence_id": "evi_temp_1",
+        "processing_version": 1,
+        "is_active": True,
+        "event_type": "ORDER_PLACED",
+        "decision_state": "VALIDATED",
+        "review_reasons": [],
+        "trigger_raw_text": "Order was placed on 5 October 2026",
+        "char_start": 0,
+        "char_end": 32,
+        "temporal_information": "2026-10-05",
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    resp_model = EventResponse(**event_payload)
+    dumped = resp_model.model_dump()
+    assert dumped["temporal_information"] == "2026-10-05"
+
+    # Also test None temporal_information
+    event_payload_none = dict(event_payload, event_id="evt_test_temporal_2", temporal_information=None)
+    resp_none = EventResponse(**event_payload_none)
+    assert resp_none.model_dump()["temporal_information"] is None
+
 

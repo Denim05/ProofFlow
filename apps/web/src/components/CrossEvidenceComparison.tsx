@@ -5,6 +5,8 @@ import {
   EventResponse,
   EvidenceResponse,
   FindingResponse,
+  ReviewDecision,
+  FindingReviewResponse,
 } from "@/types/api";
 import { api } from "@/lib/api";
 import {
@@ -16,6 +18,13 @@ import {
   Info,
   RefreshCw,
   Loader2,
+  UserCheck,
+  History,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  XCircle,
+  Check,
 } from "lucide-react";
 
 export interface CrossEvidenceComparisonProps {
@@ -60,13 +69,26 @@ export function CrossEvidenceComparison({
   const [loading, setLoading] = useState<boolean>(Boolean(caseId && !initialFindings));
   const [error, setError] = useState<string | null>(null);
 
+  // Human Review Adjudication State
+  const [adjudicatingFindingId, setAdjudicatingFindingId] = useState<string | null>(null);
+  const [selectedDecision, setSelectedDecision] = useState<Record<string, ReviewDecision>>({});
+  const [decisionReason, setDecisionReason] = useState<Record<string, string>>({});
+  const [confirmingSave, setConfirmingSave] = useState<Record<string, boolean>>({});
+  const [submittingReview, setSubmittingReview] = useState<Record<string, boolean>>({});
+  const [reviewError, setReviewError] = useState<Record<string, string | null>>({});
+  const [reviewSuccess, setReviewSuccess] = useState<Record<string, string | null>>({});
+  const [viewingHistoryFindingId, setViewingHistoryFindingId] = useState<string | null>(null);
+  const [findingHistories, setFindingHistories] = useState<Record<string, FindingReviewResponse[]>>({});
+  const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
+
   const fetchFindings = useCallback(async () => {
     if (!caseId) return;
     setLoading(true);
     setError(null);
     try {
       const response = await api.getCaseFindings(caseId);
-      setBackendFindings(response.items);
+      const items = Array.isArray(response) ? response : (response?.items || []);
+      setBackendFindings(items);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load findings";
       setError(msg);
@@ -98,19 +120,20 @@ export function CrossEvidenceComparison({
       const normOrder = normalizeReference(ev.order_reference);
       const normTxn = normalizeReference(ev.transaction_reference);
       if (normOrder) {
-        const group = refGroups.get(normOrder) || {
-          displayRef: ev.order_reference!.trim(),
-          items: [],
-        };
+        let group = refGroups.get(normOrder);
+        if (!group) {
+          group = { displayRef: (ev.order_reference || "").trim(), items: [] };
+          refGroups.set(normOrder, group);
+        }
         group.items.push(ev);
-        refGroups.set(normOrder, group);
-      } else if (normTxn) {
-        const group = refGroups.get(normTxn) || {
-          displayRef: ev.transaction_reference!.trim(),
-          items: [],
-        };
+      }
+      if (normTxn && normTxn !== normOrder) {
+        let group = refGroups.get(normTxn);
+        if (!group) {
+          group = { displayRef: (ev.transaction_reference || "").trim(), items: [] };
+          refGroups.set(normTxn, group);
+        }
         group.items.push(ev);
-        refGroups.set(normTxn, group);
       }
     });
 
@@ -127,8 +150,12 @@ export function CrossEvidenceComparison({
           const pageASuffix = evA.page_number ? ` (p. ${evA.page_number})` : "";
           const pageBSuffix = evB.page_number ? ` (p. ${evB.page_number})` : "";
 
-          if (evA.amount_value !== null && evA.amount_value !== undefined &&
-              evB.amount_value !== null && evB.amount_value !== undefined) {
+          if (
+            evA.amount_value !== null &&
+            evA.amount_value !== undefined &&
+            evB.amount_value !== null &&
+            evB.amount_value !== undefined
+          ) {
             const valA = Number(evA.amount_value);
             const valB = Number(evB.amount_value);
             if (!isNaN(valA) && !isNaN(valB)) {
@@ -183,7 +210,8 @@ export function CrossEvidenceComparison({
                 const pairKey = [evA.event_id, evB.event_id].sort().join("::") + "::AMOUNT";
                 if (!seenPairs.has(pairKey)) {
                   seenPairs.add(pairKey);
-                  const isUncertain = evA.decision_state === "REVIEW_NEEDED" || evB.decision_state === "REVIEW_NEEDED";
+                  const isUncertain =
+                    evA.decision_state === "REVIEW_NEEDED" || evB.decision_state === "REVIEW_NEEDED";
                   findings.push({
                     finding_id: `fnd-amount-${normRef}-${evA.event_id}-${evB.event_id}`,
                     case_id: evA.case_id,
@@ -302,6 +330,106 @@ export function CrossEvidenceComparison({
 
   const activeFindings = backendFindings !== null ? backendFindings : clientFallbackFindings;
 
+  // Review Adjudication Handlers
+  const handleStartReview = (finding: FindingResponse) => {
+    setAdjudicatingFindingId(finding.finding_id);
+    setSelectedDecision((prev) => ({
+      ...prev,
+      [finding.finding_id]: finding.active_review?.decision || "CONFIRMED_INCONSISTENCY",
+    }));
+    setDecisionReason((prev) => ({
+      ...prev,
+      [finding.finding_id]: finding.active_review?.reason || "",
+    }));
+    setConfirmingSave((prev) => ({ ...prev, [finding.finding_id]: false }));
+    setReviewError((prev) => ({ ...prev, [finding.finding_id]: null }));
+    setReviewSuccess((prev) => ({ ...prev, [finding.finding_id]: null }));
+  };
+
+  const handleCancelReview = (findingId: string) => {
+    setAdjudicatingFindingId(null);
+    setConfirmingSave((prev) => ({ ...prev, [findingId]: false }));
+    setReviewError((prev) => ({ ...prev, [findingId]: null }));
+  };
+
+  const handleRequestConfirm = (findingId: string) => {
+    const decision = selectedDecision[findingId];
+    const reason = (decisionReason[findingId] || "").trim();
+
+    if (decision === "DISMISSED" && (!reason || reason.length < 3)) {
+      setReviewError((prev) => ({
+        ...prev,
+        [findingId]: "A meaningful dismissal reason (at least 3 characters) is required.",
+      }));
+      return;
+    }
+
+    setReviewError((prev) => ({ ...prev, [findingId]: null }));
+    setConfirmingSave((prev) => ({ ...prev, [findingId]: true }));
+  };
+
+  const handleSaveReview = async (findingId: string) => {
+    if (!caseId) return;
+    const decision = selectedDecision[findingId];
+    if (!decision) return;
+    const reason = (decisionReason[findingId] || "").trim();
+
+    setSubmittingReview((prev) => ({ ...prev, [findingId]: true }));
+    setReviewError((prev) => ({ ...prev, [findingId]: null }));
+
+    try {
+      const updatedReview = await api.recordFindingReview(caseId, findingId, {
+        decision,
+        reason: reason || undefined,
+      });
+
+      // Update finding with new active review state
+      setBackendFindings((prev) => {
+        if (!prev) return prev;
+        return prev.map((f) =>
+          f.finding_id === findingId ? { ...f, active_review: updatedReview } : f
+        );
+      });
+
+      // Refresh history if history accordion is open
+      if (viewingHistoryFindingId === findingId) {
+        const historyRes = await api.getFindingReviews(caseId, findingId);
+        setFindingHistories((prev) => ({ ...prev, [findingId]: historyRes.items }));
+      }
+
+      setReviewSuccess((prev) => ({
+        ...prev,
+        [findingId]: `Review decision '${decision.replace(/_/g, " ")}' saved to audit log.`,
+      }));
+      setConfirmingSave((prev) => ({ ...prev, [findingId]: false }));
+      setAdjudicatingFindingId(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save review decision";
+      setReviewError((prev) => ({ ...prev, [findingId]: msg }));
+    } finally {
+      setSubmittingReview((prev) => ({ ...prev, [findingId]: false }));
+    }
+  };
+
+  const handleToggleHistory = async (findingId: string) => {
+    if (viewingHistoryFindingId === findingId) {
+      setViewingHistoryFindingId(null);
+      return;
+    }
+    setViewingHistoryFindingId(findingId);
+    if (!caseId) return;
+
+    setLoadingHistory((prev) => ({ ...prev, [findingId]: true }));
+    try {
+      const historyRes = await api.getFindingReviews(caseId, findingId);
+      setFindingHistories((prev) => ({ ...prev, [findingId]: historyRes.items }));
+    } catch {
+      // Graceful fallback
+    } finally {
+      setLoadingHistory((prev) => ({ ...prev, [findingId]: false }));
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Informational Guidance Notice */}
@@ -310,11 +438,12 @@ export function CrossEvidenceComparison({
           <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-semibold text-slate-800">
-              Backend Findings Service Analysis
+              Cross-Examination & Human Adjudication Workspace
             </p>
             <p className="leading-relaxed">
               Authoritative, source-grounded findings computed on demand by the ProofFlow reasoning engine.
-              Evaluates monetary divergences, conflicting assertions, temporal violations, and missing corroborations across active evidence extractions.
+              Investigators can adjudicate individual findings as Confirmed Inconsistency, Resolved, or Dismissed.
+              Human decisions are preserved in an immutable audit trail without modifying original ML extractions.
             </p>
           </div>
         </div>
@@ -368,7 +497,7 @@ export function CrossEvidenceComparison({
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {activeFindings.map((finding) => {
             let badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
             let IconComponent = AlertTriangle;
@@ -387,15 +516,25 @@ export function CrossEvidenceComparison({
               IconComponent = HelpCircle;
             }
 
+            const activeRev = finding.active_review;
+            const isAdjudicating = adjudicatingFindingId === finding.finding_id;
+            const isViewingHistory = viewingHistoryFindingId === finding.finding_id;
+            const historyList = findingHistories[finding.finding_id] || [];
+            const isSubmitting = submittingReview[finding.finding_id] || false;
+            const isConfirming = confirmingSave[finding.finding_id] || false;
+            const err = reviewError[finding.finding_id];
+            const succ = reviewSuccess[finding.finding_id];
+
             return (
               <div
                 key={finding.finding_id}
-                className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm space-y-3.5 hover:border-slate-300 transition"
+                className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm space-y-4 hover:border-slate-300 transition"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                {/* Header: Finding Title + Conflict State + Severity */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${badgeColor}`}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${badgeColor} mt-0.5`}
                     >
                       <IconComponent className="w-4 h-4" />
                     </div>
@@ -403,28 +542,80 @@ export function CrossEvidenceComparison({
                       <h4 className="text-sm font-bold text-slate-900">
                         {finding.title}
                       </h4>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        {finding.conflict_state.replace(/_/g, " ")}
-                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {finding.conflict_state.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[11px] text-slate-300">•</span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          ID: {finding.finding_id}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider self-start sm:self-center border ${
-                      finding.severity === "HIGH"
-                        ? "bg-rose-50 text-rose-700 border-rose-200"
-                        : finding.severity === "MEDIUM"
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-slate-100 text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    {finding.severity} SEVERITY
-                  </span>
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    {/* Human Review Status Pill */}
+                    {activeRev ? (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                          activeRev.decision === "CONFIRMED_INCONSISTENCY"
+                            ? "bg-amber-50 text-amber-800 border-amber-300"
+                            : activeRev.decision === "RESOLVED"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                            : "bg-slate-100 text-slate-700 border-slate-300"
+                        }`}
+                      >
+                        <UserCheck className="w-3 h-3 shrink-0" />
+                        {activeRev.decision === "CONFIRMED_INCONSISTENCY"
+                          ? "Confirmed Inconsistency"
+                          : activeRev.decision === "RESOLVED"
+                          ? "Resolved"
+                          : "Dismissed"}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-50 text-slate-500 border border-slate-200">
+                        Pending Review
+                      </span>
+                    )}
+
+                    {/* ML Severity Badge */}
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                        finding.severity === "HIGH"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : finding.severity === "MEDIUM"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {finding.severity} SEVERITY
+                    </span>
+                  </div>
                 </div>
 
+                {/* Finding Summary */}
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {finding.summary}
                 </p>
+
+                {/* Active Review Details Banner if reviewed */}
+                {activeRev && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="font-semibold text-slate-700 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                        Human Review Adjudication (Revision v{activeRev.version})
+                      </span>
+                      <span>Reviewer: {activeRev.reviewer_id}</span>
+                    </div>
+                    {activeRev.reason && (
+                      <p className="text-slate-700 italic border-l-2 border-slate-400 pl-2 text-[11px] leading-relaxed">
+                        &ldquo;{activeRev.reason}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Structured Difference View */}
                 {finding.field_diff && (
@@ -451,7 +642,7 @@ export function CrossEvidenceComparison({
                   </div>
                 )}
 
-                {/* Grounded Source Citations */}
+                {/* Grounded Evidence Citations */}
                 <div className="pt-2 border-t border-slate-100 space-y-1.5">
                   <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     Grounded Evidence Citations
@@ -497,6 +688,327 @@ export function CrossEvidenceComparison({
                     })}
                   </div>
                 </div>
+
+                {/* Reviewer Action Bar */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {caseId && (
+                      <button
+                        onClick={() =>
+                          isAdjudicating ? handleCancelReview(finding.finding_id) : handleStartReview(finding)
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        {isAdjudicating
+                          ? "Close Workspace"
+                          : activeRev
+                          ? "Update Adjudication"
+                          : "Adjudicate Finding"}
+                      </button>
+                    )}
+
+                    {caseId && (
+                      <button
+                        onClick={() => handleToggleHistory(finding.finding_id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <History className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Audit History</span>
+                        {isViewingHistory ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {succ && (
+                    <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
+                      {succ}
+                    </span>
+                  )}
+                </div>
+
+                {/* Human Adjudication Workspace Form */}
+                {isAdjudicating && (
+                  <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 space-y-4">
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-brand-600" />
+                        Human Review Adjudication
+                      </h5>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Select a formal review decision. Decisions are recorded in the case audit trail and will not mutate underlying ML confidence scores.
+                      </p>
+                    </div>
+
+                    {/* Decision Selection Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDecision((prev) => ({
+                            ...prev,
+                            [finding.finding_id]: "CONFIRMED_INCONSISTENCY",
+                          }));
+                          setConfirmingSave((prev) => ({ ...prev, [finding.finding_id]: false }));
+                          setReviewError((prev) => ({ ...prev, [finding.finding_id]: null }));
+                        }}
+                        className={`p-3 rounded-lg border text-left space-y-1 transition ${
+                          selectedDecision[finding.finding_id] === "CONFIRMED_INCONSISTENCY"
+                            ? "bg-amber-50 border-amber-300 ring-1 ring-amber-300 text-amber-950"
+                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-800"
+                        }`}
+                      >
+                        <div className="text-xs font-bold flex items-center justify-between">
+                          <span>Confirmed Inconsistency</span>
+                          {selectedDecision[finding.finding_id] === "CONFIRMED_INCONSISTENCY" && (
+                            <Check className="w-3.5 h-3.5 text-amber-700" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal">
+                          Verified contradiction or sequence error represents a genuine dispute.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDecision((prev) => ({
+                            ...prev,
+                            [finding.finding_id]: "RESOLVED",
+                          }));
+                          setConfirmingSave((prev) => ({ ...prev, [finding.finding_id]: false }));
+                          setReviewError((prev) => ({ ...prev, [finding.finding_id]: null }));
+                        }}
+                        className={`p-3 rounded-lg border text-left space-y-1 transition ${
+                          selectedDecision[finding.finding_id] === "RESOLVED"
+                            ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-300 text-emerald-950"
+                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-800"
+                        }`}
+                      >
+                        <div className="text-xs font-bold flex items-center justify-between">
+                          <span>Resolved</span>
+                          {selectedDecision[finding.finding_id] === "RESOLVED" && (
+                            <Check className="w-3.5 h-3.5 text-emerald-700" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal">
+                          Discrepancy reconciled, settled, or clarified by external evidence.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDecision((prev) => ({
+                            ...prev,
+                            [finding.finding_id]: "DISMISSED",
+                          }));
+                          setConfirmingSave((prev) => ({ ...prev, [finding.finding_id]: false }));
+                          setReviewError((prev) => ({ ...prev, [finding.finding_id]: null }));
+                        }}
+                        className={`p-3 rounded-lg border text-left space-y-1 transition ${
+                          selectedDecision[finding.finding_id] === "DISMISSED"
+                            ? "bg-slate-100 border-slate-400 ring-1 ring-slate-400 text-slate-900"
+                            : "bg-white border-slate-200 hover:border-slate-300 text-slate-800"
+                        }`}
+                      >
+                        <div className="text-xs font-bold flex items-center justify-between">
+                          <span>Dismissed</span>
+                          {selectedDecision[finding.finding_id] === "DISMISSED" && (
+                            <Check className="w-3.5 h-3.5 text-slate-700" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal">
+                          Disregard finding (reason required: expected variance, policy exception, etc.).
+                        </p>
+                      </button>
+                    </div>
+
+                    {/* Reason Text Area */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                        <span>
+                          {selectedDecision[finding.finding_id] === "DISMISSED"
+                            ? "Dismissal Reason (Required)"
+                            : "Adjudication Notes (Optional)"}
+                        </span>
+                        {selectedDecision[finding.finding_id] === "DISMISSED" && (
+                          <span className="text-[10px] text-rose-600 font-bold uppercase tracking-wider">
+                            Mandatory
+                          </span>
+                        )}
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={decisionReason[finding.finding_id] || ""}
+                        onChange={(e) => {
+                          setDecisionReason((prev) => ({
+                            ...prev,
+                            [finding.finding_id]: e.target.value,
+                          }));
+                          setReviewError((prev) => ({ ...prev, [finding.finding_id]: null }));
+                        }}
+                        placeholder={
+                          selectedDecision[finding.finding_id] === "DISMISSED"
+                            ? "Explain why this finding is dismissed (e.g. 'Partial settlement confirmed via banking portal')..."
+                            : "Optional rationale or operational notes for the audit trail..."
+                        }
+                        className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 leading-relaxed text-slate-800 placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    {/* Error Banner */}
+                    {err && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 flex items-start gap-2 text-xs text-rose-700">
+                        <XCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                        <span>{err}</span>
+                      </div>
+                    )}
+
+                    {/* Confirmation Step & Actions */}
+                    {isConfirming ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2.5">
+                        <div className="flex items-start gap-2 text-xs text-amber-900">
+                          <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <span className="font-bold">Confirm Review Submission</span>
+                            <p className="text-[11px] text-amber-800">
+                              You are recording this finding as{" "}
+                              <strong>
+                                {selectedDecision[finding.finding_id]?.replace(/_/g, " ")}
+                              </strong>
+                              . This decision will be appended to the case audit log.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleSaveReview(finding.finding_id)}
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50 flex items-center gap-1.5 transition"
+                          >
+                            {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            Confirm & Save Decision
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() =>
+                              setConfirmingSave((prev) => ({ ...prev, [finding.finding_id]: false }))
+                            }
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
+                          >
+                            Back to Edit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRequestConfirm(finding.finding_id)}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition"
+                        >
+                          Review & Confirm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelReview(finding.finding_id)}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Decision Audit History Accordion */}
+                {isViewingHistory && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <History className="w-4 h-4 text-slate-500" />
+                        Decision Audit History for Finding {finding.finding_id}
+                      </h5>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {historyList.length} revision{historyList.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+
+                    {loadingHistory[finding.finding_id] ? (
+                      <div className="py-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                        Loading history...
+                      </div>
+                    ) : historyList.length === 0 ? (
+                      <div className="text-xs text-slate-500 italic py-2">
+                        No historical human decisions recorded for this finding yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {historyList.map((rev) => (
+                          <div
+                            key={rev.review_id}
+                            className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                              rev.is_active
+                                ? "bg-white border-slate-300 ring-1 ring-slate-200"
+                                : "bg-slate-100/70 border-slate-200 opacity-75"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-800">
+                                  Revision v{rev.version}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                    rev.decision === "CONFIRMED_INCONSISTENCY"
+                                      ? "bg-amber-100 text-amber-800"
+                                      : rev.decision === "RESOLVED"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-slate-200 text-slate-700"
+                                  }`}
+                                >
+                                  {rev.decision.replace(/_/g, " ")}
+                                </span>
+                                {rev.is_active ? (
+                                  <span className="text-[10px] font-bold text-brand-600 uppercase">
+                                    [Active]
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 uppercase">
+                                    [Superseded]
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-slate-400">
+                                {new Date(rev.created_at).toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-500">
+                              Reviewer: <span className="font-mono text-slate-700">{rev.reviewer_id}</span>
+                            </div>
+
+                            {rev.reason && (
+                              <p className="text-slate-700 italic border-l-2 border-slate-300 pl-2 text-[11px]">
+                                &ldquo;{rev.reason}&rdquo;
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

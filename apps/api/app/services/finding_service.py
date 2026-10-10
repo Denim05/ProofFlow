@@ -42,8 +42,15 @@ EXPECTED_PRECEDENCE = [
     ("ORDER_SHIPPED", "ITEM_DELIVERED"),
     ("ITEM_SHIPPED", "ORDER_DELIVERED"),
     ("ITEM_SHIPPED", "ITEM_DELIVERED"),
+    ("REFUND_REQUESTED", "REFUND_UNDER_REVIEW"),
+    ("REFUND_REQUESTED", "REFUND_APPROVED"),
     ("REFUND_REQUESTED", "REFUND_PROCESSED"),
     ("REFUND_REQUESTED", "REFUND_COMPLETED"),
+    ("REFUND_UNDER_REVIEW", "REFUND_APPROVED"),
+    ("REFUND_UNDER_REVIEW", "REFUND_PROCESSED"),
+    ("REFUND_UNDER_REVIEW", "REFUND_COMPLETED"),
+    ("REFUND_APPROVED", "REFUND_PROCESSED"),
+    ("REFUND_APPROVED", "REFUND_COMPLETED"),
     ("REFUND_PROCESSED", "REFUND_RECEIVED"),
     ("REFUND_COMPLETED", "REFUND_RECEIVED"),
 ]
@@ -171,13 +178,15 @@ class FindingService:
         # 1. Fetch active evidence documents for case
         evidence_cursor = db.evidence.find(
             {"case_id": case_id, "user_id": user_id},
-            {"evidence_id": 1, "original_filename": 1, "active_processing_version": 1, "status": 1},
+            {"evidence_id": 1, "original_filename": 1, "active_processing_version": 1, "status": 1, "extraction_summary": 1},
         )
         evidence_name_map: Dict[str, str] = {}
         active_version_map: Dict[str, int] = {}
         active_pairs: List[Dict[str, Any]] = []
+        raw_evidence_docs: List[Dict[str, Any]] = []
 
         async for doc in evidence_cursor:
+            raw_evidence_docs.append(doc)
             evi_id = doc.get("evidence_id")
             if not evi_id or not isinstance(evi_id, str):
                 continue
@@ -219,11 +228,68 @@ class FindingService:
             ):
                 events.append(row)
 
-        if not events:
-            return FindingListResponse(items=[], total=0, case_id=case_id)
+        evidence_ids_with_active_events = {row.get("evidence_id") for row in events}
 
         findings: List[FindingResponse] = []
         seen_finding_ids: Set[str] = set()
+
+        # Step 2b: Unreadable evidence or documents producing zero events
+        for doc in raw_evidence_docs:
+            evi_id = doc.get("evidence_id")
+            if not evi_id or evi_id in evidence_ids_with_active_events:
+                continue
+            filename = doc.get("original_filename") or evi_id
+            status = doc.get("status")
+            ext_summary = doc.get("extraction_summary") or {}
+            events_extracted = ext_summary.get("events_extracted") if isinstance(ext_summary, dict) else None
+
+            if status == "REVIEW_NEEDED" or events_extracted == 0:
+                f_id = generate_finding_id(
+                    case_id,
+                    "ZERO_EVENT_EXTRACTION_ADVISORY",
+                    evi_id,
+                    [],
+                )
+                if f_id not in seen_finding_ids:
+                    seen_finding_ids.add(f_id)
+                    diag = ext_summary.get("diagnostic") if isinstance(ext_summary, dict) else None
+                    if status == "REVIEW_NEEDED":
+                        title = f"Extraction Advisory: Manual Review Required for Evidence ({filename})"
+                        summary = diag or (
+                            f"Evidence document '{filename}' is flagged for manual review due to scan quality or low OCR confidence. "
+                            f"Manual verification is recommended before evaluating factual consistency."
+                        )
+                    else:
+                        title = f"Extraction Advisory: Zero Actionable Events Extracted ({filename})"
+                        summary = diag or (
+                            f"Uploaded evidence document '{filename}' produced zero validated business lifecycle events. "
+                            f"The document may consist of legal disclaimers, non-actionable text, or non-dispute content."
+                        )
+
+                    findings.append(
+                        FindingResponse(
+                            finding_id=f_id,
+                            case_id=case_id,
+                            finding_type=FindingType.MISSING_EVIDENCE_ADVISORY.value,
+                            title=title,
+                            summary=summary,
+                            severity="LOW",
+                            conflict_state=ConflictState.INSUFFICIENT_CONTEXT.value,
+                            citations=[
+                                EvidenceCitation(
+                                    evidence_id=evi_id,
+                                    original_filename=filename,
+                                    page_number=1,
+                                    trigger_raw_text="[Document produced 0 validated lifecycle events]",
+                                )
+                            ],
+                            model_confidence=1.0,
+                            model_name=REASONING_METADATA.model_name,
+                        )
+                    )
+
+        if not events:
+            return FindingListResponse(items=findings, total=len(findings), case_id=case_id)
 
         # 3. Reference-based cross-document comparisons (Monetary, Polarity, Outcomes)
         # Group events by normalized order_reference and/or transaction_reference
@@ -628,8 +694,124 @@ class FindingService:
                                         )
                                     )
 
-        # 4. Missing Corroboration Analysis (e.g., in-transit assertions without settlement)
-        outgoing_tx_types = {"PAYMENT_SENT", "REFUND_REQUESTED", "REFUND_INITIATED"}
+                    # --- D. Same Milestone Date Discrepancy ---
+                    if type_a == type_b:
+                        date_a = str(ev_a.get("temporal_information") or "").strip()
+                        date_b = str(ev_b.get("temporal_information") or "").strip()
+                        if date_a and date_b and date_a != date_b:
+                            date_pair_key = (min(ev_a["event_id"], ev_b["event_id"]), max(ev_a["event_id"], ev_b["event_id"]), "DATE_DISCREPANCY")
+                            if date_pair_key not in evaluated_pairs:
+                                evaluated_pairs.add(date_pair_key)
+                                f_id = generate_finding_id(
+                                    case_id,
+                                    "DATE_DISCREPANCY",
+                                    norm_key,
+                                    [ev_a["event_id"], ev_b["event_id"]],
+                                )
+                                if f_id not in seen_finding_ids:
+                                    seen_finding_ids.add(f_id)
+                                    clean_type = (type_a or "").replace("_", " ").title()
+                                    findings.append(
+                                        FindingResponse(
+                                            finding_id=f_id,
+                                            case_id=case_id,
+                                            finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                            title=f"Potential Inconsistency: Event Date Discrepancy on {clean_type} ({display_ref})",
+                                            summary=(
+                                                f"'{clean_type}' is recorded on {date_a} in {source_a} and on {date_b} in "
+                                                f"{source_b} for reference '{display_ref}'. This indicates divergent "
+                                                f"chronological records regarding when this milestone occurred."
+                                            ),
+                                            severity="MEDIUM",
+                                            conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
+                                            citations=[
+                                                build_citation(ev_a, evidence_name_map),
+                                                build_citation(ev_b, evidence_name_map),
+                                            ],
+                                            field_diff=FieldDifference(
+                                                field="Event Date",
+                                                value_a=date_a,
+                                                source_a=f"{source_a}{page_a_suffix}",
+                                                value_b=date_b,
+                                                source_b=f"{source_b}{page_b_suffix}",
+                                            ),
+                                            model_confidence=min(
+                                                float(ev_a.get("model_confidence", 1.0)),
+                                                float(ev_b.get("model_confidence", 1.0)),
+                                            ),
+                                            model_name=REASONING_METADATA.model_name,
+                                        )
+                                    )
+
+        # 4. Check cross-document divergent order references across distinct evidence in the case
+        doc_order_refs: Dict[str, Set[str]] = {}
+        for ev in events:
+            evi_id = ev.get("evidence_id")
+            norm_order = normalize_reference(ev.get("order_reference"))
+            if evi_id and norm_order:
+                if evi_id not in doc_order_refs:
+                    doc_order_refs[evi_id] = set()
+                doc_order_refs[evi_id].add(norm_order)
+
+        doc_ids_with_refs = list(doc_order_refs.keys())
+        for i in range(len(doc_ids_with_refs)):
+            for j in range(i + 1, len(doc_ids_with_refs)):
+                evi_a_id = doc_ids_with_refs[i]
+                evi_b_id = doc_ids_with_refs[j]
+                refs_a = doc_order_refs[evi_a_id]
+                refs_b = doc_order_refs[evi_b_id]
+                if not refs_a.intersection(refs_b):
+                    ref_pair_key = (min(evi_a_id, evi_b_id), max(evi_a_id, evi_b_id), "REF_DISCREPANCY")
+                    if ref_pair_key not in evaluated_pairs:
+                        evaluated_pairs.add(ref_pair_key)
+                        ref_a_disp = sorted(list(refs_a))[0]
+                        ref_b_disp = sorted(list(refs_b))[0]
+                        sample_ev_a = next(e for e in events if e.get("evidence_id") == evi_a_id and normalize_reference(e.get("order_reference")) in refs_a)
+                        sample_ev_b = next(e for e in events if e.get("evidence_id") == evi_b_id and normalize_reference(e.get("order_reference")) in refs_b)
+                        f_id = generate_finding_id(
+                            case_id,
+                            "ORDER_REFERENCE_MISMATCH",
+                            f"{ref_a_disp}_{ref_b_disp}",
+                            [sample_ev_a["event_id"], sample_ev_b["event_id"]],
+                        )
+                        if f_id not in seen_finding_ids:
+                            seen_finding_ids.add(f_id)
+                            source_a = evidence_name_map.get(evi_a_id, evi_a_id)
+                            source_b = evidence_name_map.get(evi_b_id, evi_b_id)
+                            findings.append(
+                                FindingResponse(
+                                    finding_id=f_id,
+                                    case_id=case_id,
+                                    finding_type=FindingType.POTENTIAL_INCONSISTENCY.value,
+                                    title=f"Potential Inconsistency: Divergent Order References Across Case Evidence ({ref_a_disp} vs {ref_b_disp})",
+                                    summary=(
+                                        f"Evidence '{source_a}' cites order reference '{ref_a_disp}', whereas evidence '{source_b}' "
+                                        f"cites order reference '{ref_b_disp}'. Multiple discordant order identifiers within a single dispute "
+                                        f"case may indicate mismatched documentation or unrelated transactions."
+                                    ),
+                                    severity="MEDIUM",
+                                    conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
+                                    citations=[
+                                        build_citation(sample_ev_a, evidence_name_map),
+                                        build_citation(sample_ev_b, evidence_name_map),
+                                    ],
+                                    field_diff=FieldDifference(
+                                        field="Order Reference",
+                                        value_a=ref_a_disp,
+                                        source_a=source_a,
+                                        value_b=ref_b_disp,
+                                        source_b=source_b,
+                                    ),
+                                    model_confidence=min(
+                                        float(sample_ev_a.get("model_confidence", 1.0)),
+                                        float(sample_ev_b.get("model_confidence", 1.0)),
+                                    ),
+                                    model_name=REASONING_METADATA.model_name,
+                                )
+                            )
+
+        # 5. Missing Corroboration Analysis (e.g., in-transit assertions without settlement)
+        outgoing_tx_types = {"PAYMENT_SENT", "REFUND_REQUESTED", "REFUND_INITIATED", "REFUND_APPROVED"}
         confirmation_types = {"PAYMENT_MADE", "PAYMENT_CONFIRMED", "REFUND_ISSUED", "REFUND_PROCESSED", "REFUND_COMPLETED"}
 
         for ev in events:
@@ -653,23 +835,41 @@ class FindingService:
                 if not has_corroboration:
                     f_id = generate_finding_id(
                         case_id,
-                        "MISSING_CORROBORATION",
+                        f"MISSING_CORROBORATION_{ev_type}",
                         norm_ref,
                         [ev["event_id"]],
                     )
                     if f_id not in seen_finding_ids:
                         seen_finding_ids.add(f_id)
+                        if ev_type == "REFUND_APPROVED":
+                            title = f"Unconfirmed Transaction Reference ({display_ref}) - Approved Refund Awaiting Settlement"
+                            summary = (
+                                f"Refund approval is asserted in evidence, but no corresponding settlement, "
+                                f"refund completion, or payout record is present in the case. This indicates an "
+                                f"unsettled refund claim or documentation gap, not proof of a contradiction."
+                            )
+                        elif ev_type in ("REFUND_REQUESTED", "REFUND_INITIATED"):
+                            title = f"Unconfirmed Transaction Reference ({display_ref})"
+                            summary = (
+                                f"A refund request or claim is asserted in evidence, but no corresponding settlement, "
+                                f"refund completion, or payout confirmation document is present in the case. This indicates an uncorroborated "
+                                f"claim or documentation gap, not proof of a contradiction."
+                            )
+                        else:
+                            title = f"Unconfirmed Transaction Reference ({display_ref})"
+                            summary = (
+                                f"An outgoing transaction is asserted in evidence, but no corresponding settlement "
+                                f"or confirmation document is present in the case. This indicates an uncorroborated "
+                                f"claim or documentation gap, not proof of a contradiction."
+                            )
+
                         findings.append(
                             FindingResponse(
                                 finding_id=f_id,
                                 case_id=case_id,
                                 finding_type=FindingType.MISSING_EVIDENCE_ADVISORY.value,
-                                title=f"Unconfirmed Transaction Reference ({display_ref})",
-                                summary=(
-                                    f"An outgoing transaction is asserted in evidence, but no corresponding settlement "
-                                    f"or confirmation document is present in the case. This indicates an uncorroborated "
-                                    f"claim or documentation gap, not proof of a contradiction."
-                                ),
+                                title=title,
+                                summary=summary,
                                 severity="MEDIUM",
                                 conflict_state=ConflictState.POTENTIAL_CONFLICT.value,
                                 citations=[build_citation(ev, evidence_name_map)],
@@ -742,7 +942,34 @@ class FindingService:
                                 )
                             )
 
-        # 6. Sort deterministically by severity (HIGH > MEDIUM > LOW) then finding_id
+        # 6. Attach active human review adjudications if available
+        if hasattr(db, "finding_reviews"):
+            rev_cursor = db.finding_reviews.find({"case_id": case_id, "is_active": True})
+            reviews_by_finding: Dict[str, Any] = {}
+            async for rev_doc in rev_cursor:
+                f_id = rev_doc.get("finding_id")
+                if f_id:
+                    reviews_by_finding[f_id] = rev_doc
+
+            if reviews_by_finding:
+                from app.schemas.review import FindingReviewResponse, ReviewDecision
+                for f in findings:
+                    r_doc = reviews_by_finding.get(f.finding_id)
+                    if r_doc:
+                        f.active_review = FindingReviewResponse(
+                            review_id=r_doc["review_id"],
+                            case_id=r_doc["case_id"],
+                            finding_id=f.finding_id,
+                            reviewer_id=r_doc["reviewer_id"],
+                            decision=ReviewDecision(r_doc["decision"]),
+                            reason=r_doc.get("reason"),
+                            version=r_doc.get("version", 1),
+                            is_active=True,
+                            created_at=r_doc["created_at"],
+                            updated_at=r_doc["updated_at"],
+                        )
+
+        # 7. Sort deterministically by severity (HIGH > MEDIUM > LOW) then finding_id
         severity_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
         findings.sort(key=lambda f: (severity_order.get(f.severity, 3), f.finding_id))
 

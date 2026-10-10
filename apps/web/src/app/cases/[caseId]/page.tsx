@@ -23,6 +23,10 @@ import {
   Calendar,
   Tag,
   GitCompare,
+  Download,
+  FileJson,
+  Loader2,
+  Check,
 } from "lucide-react";
 
 export default function CaseDetailsPage() {
@@ -38,6 +42,65 @@ export default function CaseDetailsPage() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState<"EVIDENCE" | "TIMELINE" | "CROSS_EXAM">("EVIDENCE");
+
+  // Export State
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingJson, setExportingJson] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
+
+  const handleExportPdf = async () => {
+    if (!caseId) return;
+    setExportingPdf(true);
+    setExportErrorMessage(null);
+    setExportSuccessMessage(null);
+    try {
+      const blob = await api.exportCasePdf(caseId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `proofflow_dossier_${caseId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setExportSuccessMessage("Dispute dossier PDF downloaded successfully.");
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to export PDF dossier";
+      setExportErrorMessage(msg);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportJson = async () => {
+    if (!caseId) return;
+    setExportingJson(true);
+    setExportErrorMessage(null);
+    setExportSuccessMessage(null);
+    try {
+      const dossier = await api.exportCaseJson(caseId);
+      const blob = new Blob([JSON.stringify(dossier, null, 2)], {
+        type: "application/json",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `proofflow_dossier_${caseId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setExportSuccessMessage("Dispute dossier JSON exported successfully.");
+      setTimeout(() => setExportSuccessMessage(null), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to export JSON dossier";
+      setExportErrorMessage(msg);
+    } finally {
+      setExportingJson(false);
+    }
+  };
 
   const fetchCaseAndEvidence = useCallback(async () => {
     if (!caseId) return;
@@ -127,13 +190,55 @@ export default function CaseDetailsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-brand-600" />
                   <span>{caseItem.evidence_count} Ingested Documents</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+                >
+                  {exportingPdf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>{exportingPdf ? "Generating PDF..." : "Export PDF Dossier"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportJson}
+                  disabled={exportingJson}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition"
+                >
+                  {exportingJson ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileJson className="w-3.5 h-3.5 text-slate-500" />
+                  )}
+                  <span>{exportingJson ? "Exporting JSON..." : "Export JSON"}</span>
+                </button>
               </div>
             </div>
+
+            {exportSuccessMessage && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{exportSuccessMessage}</span>
+              </div>
+            )}
+
+            {exportErrorMessage && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{exportErrorMessage}</span>
+              </div>
+            )}
 
             {caseItem.description && (
               <p className="text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">

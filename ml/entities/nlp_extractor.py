@@ -17,10 +17,12 @@ class MockNLPExtractor(BaseNLPExtractor):
         # Predefined mock recognition dictionary for deterministic evaluation
         self._mock_orgs = [
             "Acme Corp", "Acme Store", "Amazon", "Flipkart", "PayPal", "Stripe",
-            "State Bank of India", "HDFC Bank", "ICICI Bank", "Chase Bank", "FedEx", "DHL"
+            "State Bank of India", "HDFC Bank", "ICICI Bank", "Chase Bank", "FedEx", "DHL",
+            "Example Store", "Example Store Support", "Store Support", "Customer Support",
         ]
         self._mock_persons = [
-            "John Doe", "Jane Smith", "Alice Johnson", "Bob Miller", "Rahul Sharma", "Priya Patel"
+            "John Doe", "Jane Smith", "Alice Johnson", "Bob Miller", "Rahul Sharma", "Priya Patel",
+            "Customer",
         ]
         # Structured postal address heuristic (requires street/road/building keyword + digits/PIN)
         self._address_re = re.compile(

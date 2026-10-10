@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { EventTimeline } from "@/components/EventTimeline";
+import { EventTimeline, formatEventDate } from "@/components/EventTimeline";
 import { api } from "@/lib/api";
 import { EventResponse, EvidenceResponse } from "@/types/api";
 
@@ -241,5 +241,119 @@ describe("EventTimeline", () => {
 
     const retryBtn = screen.getByRole("button", { name: /retry/i });
     expect(retryBtn).toBeInTheDocument();
+  });
+
+  it("renders grounded event date from temporal_information and preserves separate ingestion date", async () => {
+    const temporalEvents: EventResponse[] = [
+      {
+        event_id: "evt_order_1",
+        case_id: "case_test",
+        evidence_id: "evi_doc_1",
+        processing_version: 1,
+        is_active: true,
+        event_type: "ORDER_PLACED",
+        decision_state: "VALIDATED",
+        review_reasons: [],
+        trigger_raw_text: "Order PF-1001 was placed on 5 October 2026",
+        char_start: 0,
+        char_end: 42,
+        temporal_information: "2026-10-05",
+        polarity: "POSITIVE",
+        modality: "ASSERTED",
+        tense: "PAST",
+        model_confidence: 0.95,
+        model_metadata: {},
+        created_at: "2026-10-09T12:00:00Z",
+      },
+    ];
+
+    (api.listCaseEvents as any).mockResolvedValue({
+      items: temporalEvents,
+      pagination: { page: 1, limit: 100, total: 1, pages: 1 },
+    });
+
+    render(
+      <EventTimeline
+        caseId="case_test"
+        evidenceList={mockEvidenceList}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Oct 5, 2026/)).toBeInTheDocument();
+      expect(screen.getByText(/Ingested:/)).toBeInTheDocument();
+    });
+  });
+
+  it("prioritizes grounded temporal_information over ingestion timestamp for chronological sorting", async () => {
+    // Event 2 was ingested earlier (created_at Oct 1) but occurred later (temporal Oct 7)
+    // Event 1 was ingested later (created_at Oct 9) but occurred earlier (temporal Oct 5)
+    const outOfOrderEvents: EventResponse[] = [
+      {
+        event_id: "evt_delivered",
+        case_id: "case_test",
+        evidence_id: "evi_doc_2",
+        processing_version: 1,
+        is_active: true,
+        event_type: "ITEM_DELIVERED",
+        decision_state: "VALIDATED",
+        review_reasons: [],
+        trigger_raw_text: "Delivered on 7 October 2026",
+        char_start: 0,
+        char_end: 27,
+        temporal_information: "2026-10-07",
+        polarity: "POSITIVE",
+        modality: "ASSERTED",
+        tense: "PAST",
+        model_confidence: 0.95,
+        model_metadata: {},
+        created_at: "2026-10-01T10:00:00Z", // Ingested earlier
+      },
+      {
+        event_id: "evt_ordered",
+        case_id: "case_test",
+        evidence_id: "evi_doc_1",
+        processing_version: 1,
+        is_active: true,
+        event_type: "ORDER_PLACED",
+        decision_state: "VALIDATED",
+        review_reasons: [],
+        trigger_raw_text: "Ordered on 5 October 2026",
+        char_start: 0,
+        char_end: 25,
+        temporal_information: "2026-10-05",
+        polarity: "POSITIVE",
+        modality: "ASSERTED",
+        tense: "PAST",
+        model_confidence: 0.95,
+        model_metadata: {},
+        created_at: "2026-10-09T10:00:00Z", // Ingested later
+      },
+    ];
+
+    (api.listCaseEvents as any).mockResolvedValue({
+      items: outOfOrderEvents,
+      pagination: { page: 1, limit: 100, total: 2, pages: 1 },
+    });
+
+    render(
+      <EventTimeline
+        caseId="case_test"
+        evidenceList={mockEvidenceList}
+      />
+    );
+
+    await waitFor(() => {
+      const renderedHeadings = screen.getAllByTestId("event-type-heading");
+      expect(renderedHeadings[0]).toHaveTextContent("ORDER PLACED");
+      expect(renderedHeadings[1]).toHaveTextContent("ITEM DELIVERED");
+    });
+  });
+
+  it("formats ISO date-only strings safely without timezone shifts", () => {
+    expect(formatEventDate("2026-10-05")).toMatch(/Oct 5, 2026/);
+    expect(formatEventDate("2026-10-07")).toMatch(/Oct 7, 2026/);
+    expect(formatEventDate(null)).toBe("Date not stated in text");
+    expect(formatEventDate("")).toBe("Date not stated in text");
   });
 });

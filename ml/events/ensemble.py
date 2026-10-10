@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from ml.entities.normalizer import SpatialProvenanceMapper
 from ml.events.config import EventExtractionConfig, event_config
-from ml.events.detector import EventCandidate, EventDetector
+from ml.events.detector import EventCandidate, EventDetector, DISCLAIMER_PATTERNS
 from ml.events.extractor import EventArgumentExtractor
 from ml.events.taxonomy import TRIGGER_LEXICON
 from ml.schemas.entity import EntityMention, EntityType, MonetaryValue
@@ -132,6 +132,7 @@ class HybridEventCascade:
         self._tokenizer = None
         self._id2label = None
         self._device = None
+        self.fallback_reason: Optional[str] = None
 
         if self.mock_predictor is None:
             self._try_load_model()
@@ -139,6 +140,7 @@ class HybridEventCascade:
     def _try_load_model(self):
         """Attempts to load fine-tuned model and tokenizer if PyTorch and checkpoint exist."""
         if not os.path.exists(self.config.checkpoint_dir):
+            self.fallback_reason = f"Checkpoint directory not found at '{self.config.checkpoint_dir}'. Deterministic regex/rule ensemble active."
             return
 
         try:
@@ -156,8 +158,12 @@ class HybridEventCascade:
                 with open(mapping_path, "r", encoding="utf-8") as f:
                     mapping = json.load(f)
                     self._id2label = {int(k): v for k, v in mapping["id2label"].items()}
-        except Exception:
-            # CPU fallback / test environment without PyTorch
+        except ImportError as ie:
+            self.fallback_reason = f"Neural runtime dependencies not installed ({ie.name if hasattr(ie, 'name') else 'PyTorch/Transformers'}). Deterministic regex/rule ensemble active."
+            self._model = None
+            self._tokenizer = None
+        except Exception as exc:
+            self.fallback_reason = f"Failed to load checkpoint from '{self.config.checkpoint_dir}': {exc}. Deterministic regex/rule ensemble active."
             self._model = None
             self._tokenizer = None
 
@@ -269,7 +275,135 @@ class HybridEventCascade:
             )
             results.append(val_res)
 
-        return results
+        return self._consolidate_document_events(results)
+
+    def _consolidate_document_events(
+        self,
+        results: List[EnsembleValidationResult],
+    ) -> List[EnsembleValidationResult]:
+        """Consolidates duplicate mentions referring to the same real-world event in the same document.
+        
+        Preserves all source provenance, character spans, and original quotes as corroborating mentions.
+        Does not merge distinct events with conflicting order IDs, transaction IDs, or temporal dates.
+        """
+        if len(results) <= 1:
+            return results
+
+        consolidated: List[EnsembleValidationResult] = []
+        event_results = [r for r in results if r.event is not None and r.decision_state in (EnsembleDecisionState.VALIDATED, EnsembleDecisionState.REVIEW_NEEDED)]
+        other_results = [r for r in results if r not in event_results]
+
+        # Group candidates by event_type
+        by_type: Dict[EventType, List[EnsembleValidationResult]] = {}
+        for r in event_results:
+            by_type.setdefault(r.event.event_type, []).append(r)
+
+        for etype, group in by_type.items():
+            clusters: List[List[EnsembleValidationResult]] = []
+            for item in group:
+                ev = item.event
+                matched_cluster = None
+                for cluster in clusters:
+                    lead_ev = cluster[0].event
+                    # Check polarity and modality compatibility
+                    if lead_ev.polarity != ev.polarity or lead_ev.modality != ev.modality:
+                        continue
+                    # Check order reference compatibility: must be identical or one None
+                    if lead_ev.order_reference and ev.order_reference and lead_ev.order_reference != ev.order_reference:
+                        continue
+                    # Check transaction reference compatibility
+                    if lead_ev.transaction_reference and ev.transaction_reference and lead_ev.transaction_reference != ev.transaction_reference:
+                        continue
+                    # Check temporal information compatibility
+                    t1 = str(lead_ev.temporal_information) if lead_ev.temporal_information else None
+                    t2 = str(ev.temporal_information) if ev.temporal_information else None
+                    if t1 and t2 and t1 != t2:
+                        is_t1_time = ":" in t1 and "-" not in t1
+                        is_t2_time = ":" in t2 and "-" not in t2
+                        is_t1_date = "-" in t1 and ":" not in t1
+                        is_t2_date = "-" in t2 and ":" not in t2
+                        if not ((is_t1_time and is_t2_date) or (is_t1_date and is_t2_time)):
+                            continue
+                    # Check amount compatibility
+                    if lead_ev.amount and ev.amount and lead_ev.amount.value != ev.amount.value:
+                        continue
+
+                    matched_cluster = cluster
+                    break
+
+                if matched_cluster is not None:
+                    matched_cluster.append(item)
+                else:
+                    clusters.append([item])
+
+            for cluster in clusters:
+                if len(cluster) == 1:
+                    consolidated.append(cluster[0])
+                else:
+                    # Choose richest candidate as canonical
+                    def richness_score(r: EnsembleValidationResult) -> int:
+                        e = r.event
+                        score = 0
+                        if e.order_reference:
+                            score += 20
+                        if e.temporal_information:
+                            t_str = str(e.temporal_information)
+                            score += 25 if "-" in t_str else 10
+                        if e.amount:
+                            score += 20
+                        if e.transaction_reference:
+                            score += 20
+                        if e.trigger:
+                            score += len(e.trigger.raw_text)
+                        context = e.attributes.get("context_sentence", "")
+                        score += len(context)
+                        return score
+
+                    sorted_cluster = sorted(cluster, key=richness_score, reverse=True)
+                    canonical_res = sorted_cluster[0]
+                    canonical_ev = canonical_res.event
+
+                    for secondary_res in sorted_cluster[1:]:
+                        sec_ev = secondary_res.event
+                        # Merge non-conflicting fields
+                        if not canonical_ev.order_reference and sec_ev.order_reference:
+                            canonical_ev.order_reference = sec_ev.order_reference
+                        if not canonical_ev.temporal_information and sec_ev.temporal_information:
+                            canonical_ev.temporal_information = sec_ev.temporal_information
+                        elif canonical_ev.temporal_information and sec_ev.temporal_information:
+                            c_t = str(canonical_ev.temporal_information)
+                            s_t = str(sec_ev.temporal_information)
+                            if ":" in c_t and "-" not in c_t and "-" in s_t:
+                                canonical_ev.temporal_information = s_t
+                        if not canonical_ev.actor and sec_ev.actor:
+                            canonical_ev.actor = sec_ev.actor
+                        if not canonical_ev.amount and sec_ev.amount:
+                            canonical_ev.amount = sec_ev.amount
+
+                        # Preserve secondary provenance
+                        mention_dict = {
+                            "trigger_text": sec_ev.trigger.raw_text if sec_ev.trigger else "",
+                            "char_start": sec_ev.trigger.char_start if sec_ev.trigger else 0,
+                            "char_end": sec_ev.trigger.char_end if sec_ev.trigger else 0,
+                            "context_sentence": sec_ev.attributes.get("context_sentence", ""),
+                            "temporal_information": str(sec_ev.temporal_information) if sec_ev.temporal_information else None,
+                            "order_reference": sec_ev.order_reference,
+                            "source_reference": sec_ev.source_reference.model_dump() if sec_ev.source_reference else None,
+                            "polarity": getattr(sec_ev.polarity, "value", str(sec_ev.polarity)),
+                            "modality": getattr(sec_ev.modality, "value", str(sec_ev.modality)),
+                        }
+                        canonical_ev.attributes.setdefault("corroborating_mentions", []).append(mention_dict)
+                        canonical_ev.model_metadata.setdefault("corroborating_mentions", []).append(mention_dict)
+
+                        # Merge review reasons if any
+                        for rr in secondary_res.review_reasons:
+                            if rr not in canonical_res.review_reasons:
+                                canonical_res.review_reasons.append(rr)
+
+                    consolidated.append(canonical_res)
+
+        # Non-event and rejected results are retained unchanged
+        return consolidated + other_results
 
     def validate_candidate(
         self,
@@ -288,6 +422,17 @@ class HybridEventCascade:
 
         raw_text = evidence_text.full_raw_text
         s_text = prediction.source_text
+        s_lower = s_text.lower()
+
+        # Disclaimers must never become affirmative delivery or business events
+        if any(re.search(pat, s_lower) for pat in DISCLAIMER_PATTERNS):
+            return EnsembleValidationResult(
+                decision_state=EnsembleDecisionState.REJECTED,
+                neural_prediction=prediction,
+                event=None,
+                validation_errors=["Sentence is a non-affirmative disclaimer stating it should not be treated as proof."],
+                grounding_verified=False,
+            )
 
         # A. Check official canonical EventType
         try:
@@ -397,9 +542,54 @@ class HybridEventCascade:
         if event.amount is not None:
             if not isinstance(event.amount.value, Decimal):
                 validation_errors.append(f"Monetary value must be exact Decimal, got {type(event.amount.value)}.")
-            # Verify amount string appears in source text
-            amt_str = str(event.amount.value)
-            if amt_str not in raw_text and amt_str.rstrip("0").rstrip(".") not in raw_text:
+
+            amt_val = event.amount.value
+            amt_str = str(amt_val)
+            amount_confirmed = False
+
+            # 1. Check bound entity mention provenance
+            amt_eid = event.attributes.get("argument_provenance", {}).get("amount_entity_id")
+            bound_amt_ent = next((e for e in entities if e.entity_id == amt_eid), None) if amt_eid else None
+
+            if bound_amt_ent and bound_amt_ent.raw_value:
+                ent_raw = bound_amt_ent.raw_value
+                if ent_raw in raw_text:
+                    if bound_amt_ent.source_reference and bound_amt_ent.source_reference.char_start is not None and bound_amt_ent.source_reference.char_end is not None:
+                        s_pos = bound_amt_ent.source_reference.char_start
+                        e_pos = bound_amt_ent.source_reference.char_end
+                        if 0 <= s_pos < e_pos <= len(raw_text) and raw_text[s_pos:e_pos] == ent_raw:
+                            amount_confirmed = True
+                        elif ent_raw in raw_text:
+                            amount_confirmed = True
+                    else:
+                        amount_confirmed = True
+
+            # 2. Check candidate exact string formats in source text
+            if not amount_confirmed:
+                candidate_amt_formats = [
+                    amt_str,
+                    amt_str.rstrip("0").rstrip("."),
+                    f"{amt_val:,.2f}",
+                    f"{amt_val:,.0f}" if amt_val == amt_val.to_integral() else None,
+                ]
+                if event.amount.currency:
+                    curr = event.amount.currency
+                    candidate_amt_formats.extend([
+                        f"{curr} {amt_val:,.2f}",
+                        f"{curr} {amt_str}",
+                        f"{curr}{amt_val:,.2f}",
+                        f"{curr}{amt_str}",
+                    ])
+                    if curr == "INR":
+                        candidate_amt_formats.extend([f"₹{amt_val:,.2f}", f"₹{amt_str}", f"₹ {amt_val:,.2f}"])
+                    elif curr == "USD":
+                        candidate_amt_formats.extend([f"${amt_val:,.2f}", f"${amt_str}"])
+
+                candidate_amt_formats = [f for f in candidate_amt_formats if f]
+                if any(cf in raw_text for cf in candidate_amt_formats):
+                    amount_confirmed = True
+
+            if not amount_confirmed:
                 review_reasons.append(f"Extracted amount {amt_str} could not be confirmed verbatim in source text.")
 
         if event.order_reference and event.order_reference not in raw_text:
@@ -411,8 +601,30 @@ class HybridEventCascade:
         # Track 3 Temporal safety: ensure temporal info is grounded
         if event.temporal_information:
             temporal_str = str(event.temporal_information)
-            # If temporal info is plain string, check verbatim presence or valid relative anchor
-            if isinstance(event.temporal_information, str) and event.temporal_information not in raw_text:
+            temporal_confirmed = False
+
+            # 1. Check bound temporal entity mention provenance
+            temp_eid = event.attributes.get("argument_provenance", {}).get("temporal_entity_id")
+            bound_temp_ent = next((e for e in entities if e.entity_id == temp_eid), None) if temp_eid else None
+
+            if bound_temp_ent and bound_temp_ent.raw_value:
+                ent_raw = bound_temp_ent.raw_value
+                if ent_raw in raw_text:
+                    if bound_temp_ent.source_reference and bound_temp_ent.source_reference.char_start is not None and bound_temp_ent.source_reference.char_end is not None:
+                        s_pos = bound_temp_ent.source_reference.char_start
+                        e_pos = bound_temp_ent.source_reference.char_end
+                        if 0 <= s_pos < e_pos <= len(raw_text) and raw_text[s_pos:e_pos] == ent_raw:
+                            temporal_confirmed = True
+                        elif ent_raw in raw_text:
+                            temporal_confirmed = True
+                    else:
+                        temporal_confirmed = True
+
+            # 2. Check if normalized temporal string itself is verbatim in text
+            if not temporal_confirmed and temporal_str in raw_text:
+                temporal_confirmed = True
+
+            if not temporal_confirmed:
                 review_reasons.append(f"Temporal information '{temporal_str}' not found verbatim in text.")
 
         # Attach Model Metadata

@@ -22,7 +22,7 @@ async def test_create_case_success(client):
     assert data["case_id"].startswith("case_")
     assert data["user_id"] == "usr_alice"
     assert data["title"] == payload["title"]
-    assert data["status"] == "PROCESSING"
+    assert data["status"] == "READY"
     assert data["tags"] == ["refund", "damaged"]
     assert data["evidence_count"] == 0
 
@@ -123,11 +123,11 @@ async def test_list_cases_pagination_and_filtering(client):
     data2 = res_page2.json()["data"]
     assert len(data2["items"]) == 1
 
-    # Test status filter: PROCESSING
-    res_filtered = await client.get("/api/v1/cases?status=PROCESSING", headers={"X-User-ID": "usr_charlie"})
+    # Test status filter: READY
+    res_filtered = await client.get("/api/v1/cases?status=READY", headers={"X-User-ID": "usr_charlie"})
     assert res_filtered.status_code == 200
     for item in res_filtered.json()["data"]["items"]:
-        assert item["status"] == "PROCESSING"
+        assert item["status"] == "READY"
 
 
 @pytest.mark.asyncio

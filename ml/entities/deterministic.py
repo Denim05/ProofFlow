@@ -3,6 +3,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from ml.entities.config import EntityExtractorConfig, entity_config
 from ml.schemas.entity import EntityType
 
+ID_STOPWORDS = {
+    "for", "request", "requested", "approval", "approved", "status", "date",
+    "amount", "policy", "claim", "claims", "details", "process", "processed",
+    "confirmation", "receipt", "note", "under", "review", "is", "was", "will",
+    "and", "or", "to", "in", "on", "at", "by", "from", "with", "support", "team",
+}
+
 
 class RawEntitySpan:
     """Intermediate extracted entity candidate prior to normalization and spatial grounding."""
@@ -61,7 +68,7 @@ class DeterministicExtractor:
         # 4. Domain Identifiers: Transaction, Order, Invoice, Refund
         txn_p = "|".join(self.config.txn_prefixes)
         self.txn_re = re.compile(
-            rf"\b(?:{txn_p})[\-_:\s#]+([A-Za-z0-9]{{5,32}})\b",
+            rf"\b(?:{txn_p})[\-_:\s#]+([A-Za-z0-9][A-Za-z0-9\-_]{{3,31}})\b",
             re.IGNORECASE,
         )
         # Standalone banking UTR: 12-16 uppercase alphanumeric characters starting with letters
@@ -72,19 +79,19 @@ class DeterministicExtractor:
 
         order_p = "|".join(self.config.order_prefixes)
         self.order_re = re.compile(
-            rf"\b(?:{order_p})[\-_:\s#]+([A-Za-z0-9]{{4,24}})\b",
+            rf"\b(?:{order_p})[\-_:\s#]+([A-Za-z0-9][A-Za-z0-9\-_]{{2,23}})\b",
             re.IGNORECASE,
         )
 
         inv_p = "|".join(self.config.invoice_prefixes)
         self.inv_re = re.compile(
-            rf"\b(?:{inv_p})[\-_:\s#]+([A-Za-z0-9]{{4,24}})\b",
+            rf"\b(?:{inv_p})[\-_:\s#]+([A-Za-z0-9][A-Za-z0-9\-_]{{2,23}})\b",
             re.IGNORECASE,
         )
 
         ref_p = "|".join(self.config.refund_prefixes)
         self.ref_re = re.compile(
-            rf"\b(?:{ref_p})[\-_:\s#]+([A-Za-z0-9]{{4,24}})\b",
+            rf"\b(?:{ref_p})[\-_:\s#]+([A-Za-z0-9][A-Za-z0-9\-_]{{2,23}})\b",
             re.IGNORECASE,
         )
 
@@ -99,6 +106,13 @@ class DeterministicExtractor:
         # Matches e.g. +91 98765 43210, +1-555-123-4567, 9876543210
         self.phone_re = re.compile(
             r"(?<!\w)(?:\+(?P<intl>\d{1,3})[\s\-]?)?(?:\(?\d{2,4}\)?[\s\-]?)?\d{3,5}[\s\-]?\d{3,5}(?!\w)"
+        )
+
+        # 7. Conversational speaker turn headers
+        # Matches e.g. "09:15  Customer", "09:42  Example Store Support"
+        self.speaker_re = re.compile(
+            r"(?:^|\n)\s*(?:\d{1,2}:\d{2}(?::\d{2})?\s*[–—\-•\s]*\s*)(?P<speaker>[A-Za-z][A-Za-z0-9\s]{1,40}?)(?:\s*[:\n]|\s*$)",
+            re.MULTILINE,
         )
 
     def extract_spans(self, text: str) -> List[RawEntitySpan]:
@@ -172,12 +186,16 @@ class DeterministicExtractor:
         # 4. Domain Identifiers
         # Invoices
         for m in self.inv_re.finditer(capped_text):
+            pfx = capped_text[m.start():m.start(1)].strip(" -_:#")
+            val = m.group(1) if pfx.upper() in ("INVOICE", "BILL") else m.group(0)
+            s_s = m.start(1) if pfx.upper() in ("INVOICE", "BILL") else m.start()
+            s_e = m.end(1) if pfx.upper() in ("INVOICE", "BILL") else m.end()
             spans.append(
                 RawEntitySpan(
                     entity_type=EntityType.INVOICE_ID,
-                    raw_value=m.group(0),
-                    char_start=m.start(),
-                    char_end=m.end(),
+                    raw_value=val,
+                    char_start=s_s,
+                    char_end=s_e,
                     confidence=0.95,
                     metadata={"clean_id": m.group(1)},
                 )
@@ -185,32 +203,53 @@ class DeterministicExtractor:
 
         # Refunds
         for m in self.ref_re.finditer(capped_text):
+            sep = capped_text[m.start():m.start(1)]
+            clean_id = m.group(1)
+            # Guard against English stopwords when separator is whitespace without punctuation
+            if not any(c in sep for c in "-_:#") and clean_id.lower() in ID_STOPWORDS:
+                continue
+            pfx = sep.strip(" -_:#")
+            val = m.group(1) if pfx.upper() in ("REFUND", "RET") else m.group(0)
+            s_s = m.start(1) if pfx.upper() in ("REFUND", "RET") else m.start()
+            s_e = m.end(1) if pfx.upper() in ("REFUND", "RET") else m.end()
             spans.append(
                 RawEntitySpan(
                     entity_type=EntityType.REFUND_ID,
-                    raw_value=m.group(0),
-                    char_start=m.start(),
-                    char_end=m.end(),
+                    raw_value=val,
+                    char_start=s_s,
+                    char_end=s_e,
                     confidence=0.95,
-                    metadata={"clean_id": m.group(1)},
+                    metadata={"clean_id": clean_id},
                 )
             )
 
         # Orders
         for m in self.order_re.finditer(capped_text):
+            sep = capped_text[m.start():m.start(1)]
+            clean_id = m.group(1)
+            if not any(c in sep for c in "-_:#") and clean_id.lower() in ID_STOPWORDS:
+                continue
+            pfx = sep.strip(" -_:#")
+            val = m.group(1) if pfx.upper() == "ORDER" else m.group(0)
+            s_s = m.start(1) if pfx.upper() == "ORDER" else m.start()
+            s_e = m.end(1) if pfx.upper() == "ORDER" else m.end()
             spans.append(
                 RawEntitySpan(
                     entity_type=EntityType.ORDER_ID,
-                    raw_value=m.group(0),
-                    char_start=m.start(),
-                    char_end=m.end(),
+                    raw_value=val,
+                    char_start=s_s,
+                    char_end=s_e,
                     confidence=0.95,
-                    metadata={"clean_id": m.group(1)},
+                    metadata={"clean_id": clean_id},
                 )
             )
 
         # Transactions
         for m in self.txn_re.finditer(capped_text):
+            pfx = capped_text[m.start():m.start(1)].strip(" -_:#")
+            val = m.group(1) if pfx.upper() in ("TRANSACTION", "TRANS") else m.group(0)
+            s_s = m.start(1) if pfx.upper() in ("TRANSACTION", "TRANS") else m.start()
+            s_e = m.end(1) if pfx.upper() in ("TRANSACTION", "TRANS") else m.end()
             clean_id = m.group(1)
             has_suspected_substitution = False
             conf = 0.95
@@ -222,9 +261,9 @@ class DeterministicExtractor:
             spans.append(
                 RawEntitySpan(
                     entity_type=EntityType.TRANSACTION_ID,
-                    raw_value=m.group(0),
-                    char_start=m.start(),
-                    char_end=m.end(),
+                    raw_value=val,
+                    char_start=s_s,
+                    char_end=s_e,
                     confidence=round(conf, 2),
                     metadata={
                         "clean_id": clean_id,
@@ -294,5 +333,32 @@ class DeterministicExtractor:
                             },
                         )
                     )
+
+        # 7. Conversational Speaker Headers
+        for m in self.speaker_re.finditer(capped_text):
+            spk_raw = m.group("speaker").strip()
+            spk_lower = spk_raw.lower()
+            if spk_lower in ("customer", "buyer", "user", "client"):
+                spans.append(
+                    RawEntitySpan(
+                        entity_type=EntityType.PERSON,
+                        raw_value=spk_raw,
+                        char_start=m.start("speaker"),
+                        char_end=m.end("speaker"),
+                        confidence=0.95,
+                        metadata={"role": "customer", "source": "speaker_header"},
+                    )
+                )
+            elif any(w in spk_lower for w in ("support", "store", "agent", "merchant", "helpdesk")):
+                spans.append(
+                    RawEntitySpan(
+                        entity_type=EntityType.ORGANIZATION,
+                        raw_value=spk_raw,
+                        char_start=m.start("speaker"),
+                        char_end=m.end("speaker"),
+                        confidence=0.95,
+                        metadata={"role": "merchant_support", "source": "speaker_header"},
+                    )
+                )
 
         return spans

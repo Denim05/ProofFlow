@@ -12,33 +12,33 @@
   },
   "deberta_status": "NOT_TRAINED",
   "deterministic_baseline": {
-    "precision": 0.4074,
+    "precision": 0.3929,
     "recall": 0.1222,
-    "f1": 0.188,
+    "f1": 0.1864,
     "true_positives": 11,
-    "false_positives": 16,
+    "false_positives": 17,
     "false_negatives": 79,
-    "total_predicted": 27,
+    "total_predicted": 28,
     "grounding_rate": 1.0,
     "unsupported_rate": 0.0,
     "negation_accuracy": 0.25
   },
   "baseline_binary_detection": {
-    "tp": 27,
+    "tp": 28,
     "fp": 0,
-    "fn": 63,
+    "fn": 62,
     "tn": 6,
-    "accuracy": 0.3438,
+    "accuracy": 0.3542,
     "precision": 1.0,
-    "recall": 0.3,
-    "f1": 0.4615
+    "recall": 0.3111,
+    "f1": 0.4746
   },
   "baseline_multiclass_28_class": {
     "accuracy": 0.1771,
     "micro_f1": 0.1771,
     "macro_precision": 0.2829,
     "macro_recall": 0.1667,
-    "macro_f1": 0.1732
+    "macro_f1": 0.1733
   },
   "baseline_per_class": {
     "CHARGEBACK_REQUESTED": {
@@ -90,9 +90,9 @@
       "support": 3
     },
     "NO_EVENT": {
-      "precision": 0.087,
+      "precision": 0.0882,
       "recall": 1.0,
-      "f1": 0.16,
+      "f1": 0.1622,
       "support": 6
     },
     "ORDER_CANCELLED": {
@@ -280,7 +280,7 @@
       "ITEM_SHIPPED": 0,
       "MESSAGE_RECEIVED": 0,
       "MESSAGE_SENT": 0,
-      "NO_EVENT": 4,
+      "NO_EVENT": 3,
       "ORDER_CANCELLED": 0,
       "ORDER_DELIVERED": 0,
       "ORDER_PLACED": 0,
@@ -299,7 +299,8 @@
       "RETURN_PICKED_UP": 0,
       "RETURN_REQUESTED": 0,
       "SUPPORT_CONTACTED": 0,
-      "SUPPORT_RESPONSE": 0
+      "SUPPORT_RESPONSE": 0,
+      "REFUND_UNDER_REVIEW": 1
     },
     "ITEM_DELIVERED": {
       "CHARGEBACK_REQUESTED": 0,
@@ -1120,7 +1121,7 @@
       "sample_id": null,
       "text": "Merchant portal shows active dispute case under review.",
       "gold_type": "DISPUTE_OPENED",
-      "baseline_prediction": "NO_EVENT",
+      "baseline_prediction": "REFUND_UNDER_REVIEW",
       "deberta_prediction": "NOT_EVALUATED"
     },
     {

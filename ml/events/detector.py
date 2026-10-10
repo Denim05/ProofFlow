@@ -4,6 +4,15 @@ from ml.events.config import EventExtractionConfig, event_config
 from ml.events.taxonomy import TRIGGER_LEXICON
 from ml.schemas.event import EventModality, EventPolarity, EventTense, EventType
 
+DISCLAIMER_PATTERNS = [
+    r"\bshould\s+not\s+be\s+(?:treated|taken|considered)\s+(?:as\s+)?proof\b",
+    r"\bdoes\s+not\s+(?:[A-Za-z]+\s+)?(?:constitute|establish|prove)\b",
+    r"\bnot\s+(?:to\s+be\s+treated\s+as\s+|a\s+)?proof\s+(?:that|of)\b",
+    r"\bnot\s+evidence\s+(?:that|of)\b",
+    r"\b(?:simulated|fictional)\s+(?:status|record|document|transcript|customer claim)\b",
+    r"\bfor\s+(?:testing|demonstration|simulation)\s+purposes\s+only\b",
+]
+
 
 class EventCandidate:
     """Detected event candidate anchored to a trigger span in text."""
@@ -72,6 +81,10 @@ class EventDetector:
         for s_text, s_start, s_end in sentences:
             s_lower = s_text.lower()
 
+            # Disclaimers must not produce affirmative event candidates
+            if any(re.search(pat, s_lower) for pat in DISCLAIMER_PATTERNS):
+                continue
+
             for etype, regex in self._compiled_triggers.items():
                 for m in regex.finditer(s_text):
                     t_start = s_start + m.start()
@@ -119,11 +132,11 @@ class EventDetector:
         trig_window = sentence_lower[trig_start_in_s:trig_end_in_s]
 
         # 1. Check Negation
-        # A trigger is negated if:
-        # a) A negation cue is inside the trigger span itself (e.g. "refund was not completed")
-        # b) A negation cue is in the immediate prefix window before trigger (within same clause)
-        # c) A negation cue is in the immediate suffix window (e.g. ": no", ": false", ": failed")
         is_negated = False
+
+        # Check disclaimer negation
+        if any(re.search(pat, sentence_lower) for pat in DISCLAIMER_PATTERNS):
+            is_negated = True
         
         # Check inside trigger span first
         for n_cue in self.config.negation_cues:
@@ -188,7 +201,9 @@ class EventDetector:
         
         Ensures decimal numbers (e.g. INR 2,499.50 or $45.50) are not split mid-token.
         """
-        sentence_end_re = re.compile(r"((?<!\d)\.(?!\d)|(?<=\d)\.\s+(?=[A-Za-z])|[!?\n]+)")
+        sentence_end_re = re.compile(
+            r"((?<!\d)\.(?!\d)(?:\s+|$)|(?<=\d)\.\s+(?=[A-Za-z])|[!?]+(?:\s+|$)|(?:\r?\n\s*){2,}|(?:\r?\n(?!\s*[a-z])))"
+        )
         sentences: List[Tuple[str, int, int]] = []
         start = 0
 

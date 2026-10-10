@@ -180,6 +180,29 @@ RAW_SAMPLES: List[Dict[str, Any]] = [
         "order_reference": None, "amount": None, "temporal": None
     },
 
+    # --- REFUND_UNDER_REVIEW ---
+    {
+        "text": "Your refund request for Order ORD-44019 is currently under review by our support team.",
+        "event_type": "REFUND_UNDER_REVIEW",
+        "trigger_text": "under review",
+        "polarity": "POSITIVE", "modality": "ASSERTED", "tense": "PAST",
+        "order_reference": "ORD-44019", "amount": None, "temporal": None
+    },
+    {
+        "text": "We received your claim. Refund is under review.",
+        "event_type": "REFUND_UNDER_REVIEW",
+        "trigger_text": "under review",
+        "polarity": "POSITIVE", "modality": "ASSERTED", "tense": "PAST",
+        "order_reference": None, "amount": None, "temporal": None
+    },
+    {
+        "text": "The store support team is reviewing your refund request for order ORD-77291.",
+        "event_type": "REFUND_UNDER_REVIEW",
+        "trigger_text": "reviewing your refund request",
+        "polarity": "POSITIVE", "modality": "ASSERTED", "tense": "PAST",
+        "order_reference": "ORD-77291", "amount": None, "temporal": None
+    },
+
     # --- REFUND_INITIATED ---
     {
         "text": "Merchant initiated refund of $199.99 for cancelled booking ORD-33019.",

@@ -104,6 +104,7 @@ export interface EventResponse {
   page_number?: number | null;
   bounding_box?: number[] | null;
   actor?: string | null;
+  temporal_information?: string | null;
   amount_currency?: string | null;
   amount_value?: string | number | null;
   order_reference?: string | null;
@@ -165,6 +166,42 @@ export interface FieldDifference {
   source_b: string;
 }
 
+export type ReviewDecision =
+  | "CONFIRMED_INCONSISTENCY"
+  | "RESOLVED"
+  | "DISMISSED";
+
+export interface FindingReviewResponse {
+  review_id: string;
+  case_id: string;
+  finding_id: string;
+  reviewer_id: string;
+  decision: ReviewDecision;
+  reason?: string | null;
+  version: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FindingReviewCreateRequest {
+  decision: ReviewDecision;
+  reason?: string | null;
+}
+
+export interface FindingReviewListResponse {
+  items: FindingReviewResponse[];
+  total: number;
+  case_id: string;
+}
+
+export interface FindingReviewHistoryResponse {
+  items: FindingReviewResponse[];
+  total: number;
+  finding_id: string;
+  case_id: string;
+}
+
 export interface FindingResponse {
   finding_id: string;
   case_id: string;
@@ -182,6 +219,7 @@ export interface FindingResponse {
   model_confidence: number;
   model_name: string;
   created_at: string;
+  active_review?: FindingReviewResponse | null;
 }
 
 export interface FindingListResponse {
@@ -189,3 +227,83 @@ export interface FindingListResponse {
   total: number;
   case_id: string;
 }
+
+export interface DossierDocumentInventoryItem {
+  evidence_id: string;
+  original_filename: string;
+  media_type: string;
+  file_size_bytes: number;
+  sha256_hash: string;
+  status: string;
+  uploaded_at: string;
+  active_processing_version?: number | null;
+}
+
+export interface DossierEventItem {
+  event_id: string;
+  evidence_id: string;
+  source_document: string;
+  event_type: string;
+  decision_state: string;
+  order_reference?: string | null;
+  transaction_reference?: string | null;
+  amount_value?: number | null;
+  amount_currency?: string | null;
+  polarity: string;
+  modality: string;
+  tense: string;
+  trigger_raw_text: string;
+  char_start?: number | null;
+  char_end?: number | null;
+  page_number?: number | null;
+  stated_event_date?: string | null;
+  document_upload_time: string;
+}
+
+export interface DossierFindingItem {
+  finding_id: string;
+  finding_type: string;
+  title: string;
+  summary: string;
+  severity: string;
+  conflict_state: string;
+  citations: EvidenceCitation[];
+  field_diff?: FieldDifference | null;
+  model_confidence: number;
+  model_name: string;
+  created_at: string;
+  adjudication_status: string;
+  active_review?: FindingReviewResponse | null;
+  review_history: FindingReviewResponse[];
+}
+
+export interface DossierEvidenceGapItem {
+  gap_type: string;
+  description: string;
+  related_reference?: string | null;
+  affected_evidence_ids: string[];
+}
+
+export interface DossierMethodology {
+  system_name: string;
+  system_version: string;
+  report_standard: string;
+  disclaimer: string;
+  limitations: string[];
+}
+
+export interface DossierResponse {
+  report_version: string;
+  generated_at: string;
+  manifest_hash: string;
+  case: CaseResponse;
+  executive_summary: string;
+  document_inventory: DossierDocumentInventoryItem[];
+  events_timeline: DossierEventItem[];
+  findings: DossierFindingItem[];
+  human_reviews: FindingReviewResponse[];
+  evidence_gaps: DossierEvidenceGapItem[];
+  methodology: DossierMethodology;
+  metadata?: Record<string, unknown>;
+}
+

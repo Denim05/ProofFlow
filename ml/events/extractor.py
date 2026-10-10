@@ -48,8 +48,14 @@ class EventArgumentExtractor:
         temporal_mention = self._find_closest(
             candidate,
             proximal_entities,
-            [EntityType.DATE, EntityType.DATETIME, EntityType.TIME, EntityType.RELATIVE_TIME],
+            [EntityType.DATE, EntityType.DATETIME],
         )
+        if not temporal_mention:
+            temporal_mention = self._find_closest(
+                candidate,
+                proximal_entities,
+                [EntityType.TIME, EntityType.RELATIVE_TIME],
+            )
 
         # Actors and participants
         actor_mention = self._find_closest(candidate, proximal_entities, [EntityType.PERSON, EntityType.ORGANIZATION])
@@ -141,6 +147,12 @@ class EventArgumentExtractor:
         matching = [e for e in entities if e.entity_type in types and e.source_reference.char_start is not None]
         if not matching:
             return None
+
+        # For conversational speakers / actors, prefer the entity preceding the candidate trigger
+        if any(t in (EntityType.PERSON, EntityType.ORGANIZATION) for t in types):
+            preceding = [e for e in matching if e.source_reference.char_end <= candidate.char_start]
+            if preceding:
+                return max(preceding, key=lambda e: e.source_reference.char_end)
 
         # Sort by distance from trigger midpoint
         trig_mid = (candidate.char_start + candidate.char_end) / 2.0

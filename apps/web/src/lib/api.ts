@@ -1,7 +1,9 @@
 /**
  * ProofFlow API Client
  * Connects Next.js frontend to the FastAPI backend.
- * Uses NEXT_PUBLIC_API_URL and attaches X-User-ID for local development.
+ * Uses NEXT_PUBLIC_API_URL and attaches a Clerk session token as an
+ * Authorization Bearer header. Protected requests are never sent without a
+ * token unless the explicit development identity opt-in is enabled.
  */
 
 import {
@@ -17,6 +19,11 @@ import {
   EvidenceUploadResponse,
   FindingListResponse,
   FindingResponse,
+  FindingReviewCreateRequest,
+  FindingReviewHistoryResponse,
+  FindingReviewListResponse,
+  FindingReviewResponse,
+  DossierResponse,
   HealthStatus,
 } from "@/types/api";
 
@@ -45,6 +52,20 @@ const API_BASE_URL =
 const DEV_USER_ID =
   process.env.NEXT_PUBLIC_DEV_USER_ID || "dev_user_default";
 
+/** Maximum time a request waits for Clerk to finish initializing. */
+export const AUTH_READY_TIMEOUT_MS = 5000;
+
+/**
+ * Development identity injection is explicit opt-in only and never available
+ * in production builds. It must mirror backend ALLOW_DEV_AUTH_BYPASS=true.
+ */
+function isDevIdentityEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true"
+  );
+}
+
 export type TokenGetter = () => Promise<string | null>;
 
 let activeTokenGetter: TokenGetter | null = null;
@@ -53,23 +74,104 @@ export function registerAuthTokenGetter(getter: TokenGetter | null): void {
   activeTokenGetter = getter;
 }
 
-export async function getAuthToken(): Promise<string | null> {
-  if (activeTokenGetter) {
-    try {
-      return await activeTokenGetter();
-    } catch {
-      return null;
-    }
+/** Clears the active getter only if it is still the one supplied (prevents stale cleanup races). */
+export function clearAuthTokenGetter(getter: TokenGetter): void {
+  if (activeTokenGetter === getter) {
+    activeTokenGetter = null;
   }
-  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Auth readiness gate
+// "idle": no auth bridge mounted (e.g. unit tests) -> no waiting.
+// "pending": Clerk is initializing -> requests wait (bounded) for readiness.
+// "ready": Clerk has loaded -> requests read the token immediately.
+// ---------------------------------------------------------------------------
+type AuthReadyState = "idle" | "pending" | "ready";
+
+let authReadyState: AuthReadyState = "idle";
+let authReadyPromise: Promise<void> | null = null;
+let resolveAuthReady: (() => void) | null = null;
+
+export function markAuthPending(): void {
+  if (authReadyState === "pending") return;
+  authReadyState = "pending";
+  authReadyPromise = new Promise<void>((resolve) => {
+    resolveAuthReady = resolve;
+  });
+}
+
+export function markAuthReady(): void {
+  authReadyState = "ready";
+  const resolve = resolveAuthReady;
+  resolveAuthReady = null;
+  authReadyPromise = null;
+  resolve?.();
+}
+
+/** Test helper: restores the initial auth state. */
+export function resetAuthStateForTests(): void {
+  const resolve = resolveAuthReady;
+  activeTokenGetter = null;
+  authReadyState = "idle";
+  authReadyPromise = null;
+  resolveAuthReady = null;
+  resolve?.();
+}
+
+async function waitForAuthReady(): Promise<void> {
+  if (authReadyState !== "pending" || !authReadyPromise) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, AUTH_READY_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([authReadyPromise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  await waitForAuthReady();
+  const getter = activeTokenGetter;
+  if (!getter) return null;
+  try {
+    const token = await getter();
+    return typeof token === "string" && token.trim() ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves authentication headers for a protected request.
+ * Throws ApiError(401) locally, without contacting the backend, when no
+ * session token is available and dev identity is not explicitly enabled.
+ */
+async function resolveAuthHeaders(): Promise<Record<string, string>> {
+  const token = await getAuthToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  if (isDevIdentityEnabled()) {
+    return { "X-User-ID": DEV_USER_ID };
+  }
+  throw new ApiError(
+    "Authentication required: no active session token. Please sign in again.",
+    401,
+    "AUTH_REQUIRED"
+  );
 }
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
+  /** Public endpoints (e.g. health) skip authentication entirely. */
+  skipAuth?: boolean;
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { params, headers, ...restOptions } = options;
+  const { params, headers, skipAuth, ...restOptions } = options;
 
   let url = `${API_BASE_URL}${endpoint}`;
   if (params) {
@@ -87,18 +189,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   const requestHeaders = new Headers(headers);
 
-  // Attach bearer token if authenticated session is present and targeting API
+  // Protected API requests require a Clerk session token (or explicit dev opt-in)
   const isApiRequest = url.startsWith(API_BASE_URL);
-  if (isApiRequest && !requestHeaders.has("Authorization")) {
-    const token = await getAuthToken();
-    if (token) {
-      requestHeaders.set("Authorization", `Bearer ${token}`);
-    } else if (process.env.NODE_ENV !== "production") {
-      // In development, pass dev identity header accepted by backend dev bypass
-      if (!requestHeaders.has("X-User-ID")) {
-        requestHeaders.set("X-User-ID", DEV_USER_ID);
-      }
-    }
+  if (isApiRequest && !skipAuth && !requestHeaders.has("Authorization")) {
+    const authHeaders = await resolveAuthHeaders();
+    Object.entries(authHeaders).forEach(([key, value]) => requestHeaders.set(key, value));
   }
 
   // Set Accept header
@@ -150,14 +245,58 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   return responseData as T;
 }
 
+async function requestBlob(endpoint: string, options: RequestOptions = {}): Promise<Blob> {
+  const { params, headers, skipAuth, ...restOptions } = options;
+
+  let url = `${API_BASE_URL}${endpoint}`;
+  if (params) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, String(value));
+      }
+    });
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+  }
+
+  const requestHeaders = new Headers(headers);
+
+  const isApiRequest = url.startsWith(API_BASE_URL);
+  if (isApiRequest && !skipAuth && !requestHeaders.has("Authorization")) {
+    const authHeaders = await resolveAuthHeaders();
+    Object.entries(authHeaders).forEach(([key, value]) => requestHeaders.set(key, value));
+  }
+
+  const response = await fetch(url, {
+    ...restOptions,
+    headers: requestHeaders,
+  });
+
+  if (!response.ok) {
+    let msg = response.statusText || "Failed to download file";
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) msg = errJson.error.message;
+    } catch {
+      // non-JSON response fallback
+    }
+    throw new ApiError(msg, response.status);
+  }
+
+  return response.blob();
+}
+
 export const api = {
   // System Health
   async getHealth(): Promise<HealthStatus> {
-    return request<HealthStatus>("/health");
+    return request<HealthStatus>("/health", { skipAuth: true });
   },
 
   async getDbHealth(): Promise<HealthStatus> {
-    return request<HealthStatus>("/health/db");
+    return request<HealthStatus>("/health/db", { skipAuth: true });
   },
 
   // Case Management
@@ -194,16 +333,14 @@ export const api = {
 
     // If onProgress is supplied and XMLHttpRequest is available in browser
     if (onProgress && typeof XMLHttpRequest !== "undefined") {
-      const token = await getAuthToken();
+      const authHeaders = await resolveAuthHeaders();
       return new Promise<EvidenceUploadResponse>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", url);
 
-        if (token) {
-          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-        } else if (process.env.NODE_ENV !== "production") {
-          xhr.setRequestHeader("X-User-ID", DEV_USER_ID);
-        }
+        Object.entries(authHeaders).forEach(([key, value]) =>
+          xhr.setRequestHeader(key, value)
+        );
         xhr.setRequestHeader("Accept", "application/json");
 
         xhr.upload.onprogress = (evt) => {
@@ -321,5 +458,42 @@ export const api = {
   // Findings & Cross-Evidence Analysis
   async getCaseFindings(caseId: string): Promise<FindingListResponse> {
     return request<FindingListResponse>(`/api/v1/cases/${caseId}/findings`);
+  },
+
+  // Finding Reviews & Human-in-the-Loop Adjudication
+  async recordFindingReview(
+    caseId: string,
+    findingId: string,
+    payload: FindingReviewCreateRequest
+  ): Promise<FindingReviewResponse> {
+    return request<FindingReviewResponse>(
+      `/api/v1/cases/${caseId}/findings/${findingId}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async getFindingReviews(
+    caseId: string,
+    findingId: string
+  ): Promise<FindingReviewHistoryResponse> {
+    return request<FindingReviewHistoryResponse>(
+      `/api/v1/cases/${caseId}/findings/${findingId}/reviews`
+    );
+  },
+
+  async listCaseReviews(caseId: string): Promise<FindingReviewListResponse> {
+    return request<FindingReviewListResponse>(`/api/v1/cases/${caseId}/reviews`);
+  },
+
+  // Dispute Dossier Exports
+  async exportCaseJson(caseId: string): Promise<DossierResponse> {
+    return request<DossierResponse>(`/api/v1/cases/${caseId}/export/json`);
+  },
+
+  async exportCasePdf(caseId: string): Promise<Blob> {
+    return requestBlob(`/api/v1/cases/${caseId}/export/pdf`);
   },
 };

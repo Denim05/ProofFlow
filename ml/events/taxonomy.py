@@ -10,6 +10,7 @@ EVENT_CATEGORY_MAP: Dict[EventCategory, List[EventType]] = {
         EventType.PAYMENT_MADE,
         EventType.PAYMENT_FAILED,
         EventType.REFUND_REQUESTED,
+        EventType.REFUND_UNDER_REVIEW,
         EventType.REFUND_INITIATED,
         EventType.REFUND_COMPLETED,
         EventType.REFUND_FAILED,
@@ -49,6 +50,14 @@ TRIGGER_LEXICON: Dict[EventType, List[str]] = {
     EventType.REFUND_REQUESTED: [
         "refund requested", "requested a refund", "asked for refund",
         "demanded refund", "claim for refund", "refund application",
+        "request a refund", "requesting a refund", "request refund",
+        "refund request", "request for refund", "submitted a refund request",
+        "received your refund request",
+    ],
+    EventType.REFUND_UNDER_REVIEW: [
+        "under review", "refund under review", "reviewing refund",
+        "reviewing your refund", "reviewing your refund request",
+        "refund is under review", "refund is being reviewed",
     ],
     EventType.REFUND_INITIATED: [
         "refund initiated", "refund in progress", "processing refund",

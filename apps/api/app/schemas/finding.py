@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+from app.schemas.review import FindingReviewResponse
+
 
 class EvidenceCitation(BaseModel):
     """Source-grounded evidence provenance citation for a finding."""
@@ -47,6 +49,7 @@ class FindingResponse(BaseModel):
     model_confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     model_name: str = Field(default="proofflow-reasoning-engine")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    active_review: Optional["FindingReviewResponse"] = None
 
 
 class FindingListResponse(BaseModel):

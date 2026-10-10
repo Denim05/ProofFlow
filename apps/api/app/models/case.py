@@ -24,7 +24,7 @@ class CaseDocument(BaseModel):
     user_id: str
     title: str = Field(..., min_length=3, max_length=160)
     description: str = Field(default="", max_length=2000)
-    status: CaseStatus = Field(default=CaseStatus.PROCESSING)
+    status: CaseStatus = Field(default=CaseStatus.READY)
     tags: List[str] = Field(default_factory=list)
     evidence_count: int = Field(default=0, ge=0)
     metadata: Dict[str, Any] = Field(default_factory=dict)

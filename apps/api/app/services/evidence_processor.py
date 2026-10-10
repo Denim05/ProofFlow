@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.logging import logger
+from app.models.case import CaseStatus
 from app.models.common import utc_now
 from app.models.event import EventDocument
 from app.models.evidence import EvidenceStatus, MLProcessingMode
@@ -43,14 +44,67 @@ class EvidenceProcessingService:
     def detect_processing_mode(self) -> MLProcessingMode:
         """Accurately detects whether DeBERTa GPU, DeBERTa CPU, or deterministic fallback is running."""
         if self.event_cascade.mock_predictor is not None:
-            return MLProcessingMode.DETERMINISTIC_FALLBACK
+            return MLProcessingMode.NEURAL_DEBERTA_CPU
 
-        if self.event_cascade._model is not None and self.event_cascade._device is not None:
+        if hasattr(self.event_cascade, "_model") and self.event_cascade._model is not None and getattr(self.event_cascade, "_device", None) is not None:
             if self.event_cascade._device.type == "cuda":
                 return MLProcessingMode.NEURAL_DEBERTA_GPU
             return MLProcessingMode.NEURAL_DEBERTA_CPU
 
+        reason = getattr(
+            self.event_cascade,
+            "fallback_reason",
+            "Neural checkpoint or PyTorch/Transformers runtime unavailable.",
+        )
+        logger.info("ML runtime running in DETERMINISTIC_FALLBACK mode: %s", reason)
         return MLProcessingMode.DETERMINISTIC_FALLBACK
+
+    async def sync_case_state(self, case_id: str, db: AsyncDatabase) -> None:
+        """Recalculates evidence counts and resolves parent case status based on all case evidence items."""
+        cursor = db.evidence.find({"case_id": case_id})
+        all_evidence = []
+        async for doc in cursor:
+            all_evidence.append(doc)
+
+        if not all_evidence:
+            await db.cases.update_one(
+                {"case_id": case_id},
+                {"$set": {"evidence_count": 0, "status": CaseStatus.READY.value, "updated_at": utc_now()}},
+            )
+            return
+
+        evidence_count = len(all_evidence)
+
+        in_flight_statuses = {
+            EvidenceStatus.QUEUED.value,
+            EvidenceStatus.EXTRACTING.value,
+            EvidenceStatus.STRUCTURING.value,
+            EvidenceStatus.ANALYZING.value,
+        }
+        review_or_failed_statuses = {
+            EvidenceStatus.REVIEW_NEEDED.value,
+            EvidenceStatus.FAILED.value,
+            EvidenceStatus.INTERRUPTED.value,
+        }
+
+        statuses = [e.get("status") for e in all_evidence]
+        if any(s in in_flight_statuses for s in statuses):
+            resolved_case_status = CaseStatus.PROCESSING.value
+        elif any(s in review_or_failed_statuses for s in statuses):
+            resolved_case_status = CaseStatus.REVIEW_NEEDED.value
+        else:
+            resolved_case_status = CaseStatus.READY.value
+
+        await db.cases.update_one(
+            {"case_id": case_id},
+            {
+                "$set": {
+                    "evidence_count": evidence_count,
+                    "status": resolved_case_status,
+                    "updated_at": utc_now(),
+                }
+            },
+        )
 
     async def run_job(self, job: ProcessingJob, db: AsyncDatabase) -> None:
         """Executes full document extraction, entity normalization, and event extraction."""
@@ -219,6 +273,29 @@ class EvidenceProcessingService:
                 "processing_version": target_version,
             }
 
+            if not staged_events:
+                raw_text_stripped = evidence_text.full_raw_text.strip()
+                if not raw_text_stripped:
+                    diagnostic = "Document text is empty; no textual content available for event extraction."
+                else:
+                    from ml.events.detector import DISCLAIMER_PATTERNS
+                    import re
+
+                    has_disclaimer = any(
+                        re.search(pat, raw_text_stripped.lower())
+                        for pat in DISCLAIMER_PATTERNS
+                    )
+                    if has_disclaimer:
+                        diagnostic = (
+                            "Document text consists of non-affirmative disclaimers or simulated statements; "
+                            "no validated real-world lifecycle events were asserted."
+                        )
+                    else:
+                        diagnostic = (
+                            "No recognized event triggers or verifiable business action statements identified in source text."
+                        )
+                extraction_summary["diagnostic"] = diagnostic
+
             # 3. Atomically switch evidence document's active version conditioned on ownership and expected prior version
             version_filter = {"$in": [None, 0]} if prior_active_version is None else prior_active_version
             switch_filter = {
@@ -267,15 +344,11 @@ class EvidenceProcessingService:
                     str(cleanup_err),
                 )
 
-            # Update parent case evidence counter if this was first successful run
+            # Idempotently sync case evidence counter and status
             try:
-                if claimed.get("status") in (EvidenceStatus.QUEUED.value, EvidenceStatus.UPLOADED.value):
-                    await db.cases.update_one(
-                        {"case_id": job.case_id},
-                        {"$inc": {"evidence_count": 1}, "$set": {"updated_at": utc_now()}},
-                    )
+                await self.sync_case_state(job.case_id, db)
             except Exception as case_err:
-                logger.warning("Non-fatal case counter update warning for evidence %s: %s", job.evidence_id, str(case_err))
+                logger.warning("Non-fatal case state sync warning for evidence %s: %s", job.evidence_id, str(case_err))
 
             logger.info(
                 "Job %s completed for evidence %s: status=%s, mode=%s, events=%d, active_version=%d",
@@ -329,6 +402,10 @@ class EvidenceProcessingService:
                     }
                 },
             )
+            try:
+                await self.sync_case_state(job.case_id, db)
+            except Exception as case_err:
+                logger.warning("Non-fatal case state sync warning after failure for evidence %s: %s", job.evidence_id, str(case_err))
 
     async def recover_interrupted_jobs(
         self,

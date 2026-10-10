@@ -27,6 +27,42 @@ interface EventTimelineProps {
   refreshTrigger?: number;
 }
 
+export function getGroundedEventDate(event: EventResponse): string | null {
+  return (
+    event.temporal_information ||
+    (event.model_metadata?.event_date as string) ||
+    (event.model_metadata?.date as string) ||
+    null
+  );
+}
+
+export function formatEventDate(rawDate: string | null | undefined): string {
+  if (!rawDate) return "Date not stated in text";
+
+  // Format ISO date-only format (YYYY-MM-DD) without timezone-related day shifts
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+    const [year, month, day] = rawDate.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  }
+
+  const parsed = new Date(rawDate);
+  if (isNaN(parsed.getTime())) {
+    return rawDate;
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function EventTimeline({
   caseId,
   evidenceList,
@@ -101,7 +137,7 @@ export function EventTimeline({
   }, [events]);
 
   // Chronological sorting:
-  // Extracts date from model_metadata if present, else parses from trigger_raw_text or falls back to created_at
+  // Prioritizes grounded event date (temporal_information / metadata) over ingestion timestamp (created_at)
   const sortedAndFilteredEvents = useMemo(() => {
     let filtered = events.filter((ev) => {
       if (!searchQuery) return true;
@@ -115,19 +151,22 @@ export function EventTimeline({
       );
     });
 
-    return filtered.sort((a, b) => {
-      // Resolve event date: check model_metadata.event_date / date, fallback to created_at
-      const dateAStr =
-        (a.model_metadata?.event_date as string) ||
-        (a.model_metadata?.date as string) ||
-        a.created_at;
-      const dateBStr =
-        (b.model_metadata?.event_date as string) ||
-        (b.model_metadata?.date as string) ||
-        b.created_at;
+    const getSortTimestamp = (ev: EventResponse): number => {
+      const grounded = getGroundedEventDate(ev);
+      if (grounded) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(grounded)) {
+          const [y, m, d] = grounded.split("-").map(Number);
+          return Date.UTC(y, m - 1, d);
+        }
+        const parsed = new Date(grounded).getTime();
+        if (!isNaN(parsed)) return parsed;
+      }
+      return new Date(ev.created_at).getTime();
+    };
 
-      const timeA = new Date(dateAStr).getTime();
-      const timeB = new Date(dateBStr).getTime();
+    return filtered.sort((a, b) => {
+      const timeA = getSortTimestamp(a);
+      const timeB = getSortTimestamp(b);
 
       return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
     });
@@ -319,18 +358,9 @@ export function EventTimeline({
             const sourceFilename = evidence?.original_filename || event.evidence_id;
 
             // Distinguish contextual event date vs extraction timestamp
-            const rawEventDate =
-              (event.model_metadata?.event_date as string) ||
-              (event.model_metadata?.date as string);
+            const rawEventDate = getGroundedEventDate(event);
             const hasGroundedDate = Boolean(rawEventDate);
-
-            const displayEventDate = hasGroundedDate
-              ? new Date(rawEventDate).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })
-              : "Date not stated in text";
+            const displayEventDate = formatEventDate(rawEventDate);
 
             const extractionDate = new Date(event.created_at).toLocaleDateString(undefined, {
               year: "numeric",
@@ -355,7 +385,10 @@ export function EventTimeline({
                   {/* Header: Event Type, Date, Decision State */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-slate-900 tracking-tight">
+                      <span
+                        data-testid="event-type-heading"
+                        className="font-bold text-sm text-slate-900 tracking-tight"
+                      >
                         {event.event_type.replace(/_/g, " ")}
                       </span>
 

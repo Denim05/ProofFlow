@@ -23,6 +23,7 @@ class EventResponse(BaseModel):
     page_number: Optional[int] = None
     bounding_box: Optional[List[float]] = None
     actor: Optional[str] = None
+    temporal_information: Optional[str] = None
     amount_currency: Optional[str] = None
     amount_value: Optional[Decimal] = None
     order_reference: Optional[str] = None
