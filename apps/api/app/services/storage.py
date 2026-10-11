@@ -1,5 +1,7 @@
+import errno
 import hashlib
 import os
+import shutil
 import time
 import uuid
 from typing import Optional, Tuple
@@ -42,6 +44,55 @@ class LocalStorageService:
                 detail="Invalid storage path: directory traversal prohibited.",
             )
         return str(candidate)
+
+    def _promote_temp_to_final(self, temp_path: str, final_path: str) -> None:
+        """Atomically promotes a staged temporary file to its final destination path.
+
+        Handles both same-filesystem promotions (via instant atomic os.replace)
+        and cross-filesystem promotions (when storage_root is a separate mount/volume
+        from temp_root) by copying to a hidden temporary file on the destination filesystem,
+        flushing and syncing to disk, and performing an atomic rename within the
+        destination filesystem.
+        """
+        try:
+            os.replace(temp_path, final_path)
+        except OSError as err:
+            is_cross_device = (
+                err.errno == errno.EXDEV
+                or getattr(err, "winerror", None) == 17
+                or err.errno == 18
+                or "cross-device" in str(err).lower()
+            )
+            if not is_cross_device:
+                raise
+
+            logger.info(
+                "Cross-device filesystem boundary detected while promoting %s to %s; executing atomic two-stage promotion.",
+                temp_path,
+                final_path,
+            )
+
+            case_dir = os.path.dirname(final_path)
+            dest_temp_filename = f".{os.path.basename(final_path)}.{uuid.uuid4().hex}.tmp"
+            dest_temp_path = os.path.join(case_dir, dest_temp_filename)
+
+            try:
+                # 1. Stream copy into temporary file located directly on destination filesystem
+                with open(temp_path, "rb") as f_src, open(dest_temp_path, "wb") as f_dst:
+                    shutil.copyfileobj(f_src, f_dst, length=65536)
+                    f_dst.flush()
+                    os.fsync(f_dst.fileno())
+
+                # 2. Atomic rename within destination filesystem (guaranteed same mount)
+                os.replace(dest_temp_path, final_path)
+            except Exception:
+                # Clean up destination temporary file if copy or sync failed
+                if os.path.exists(dest_temp_path):
+                    try:
+                        os.remove(dest_temp_path)
+                    except OSError:
+                        pass
+                raise
 
     async def save_upload_stream(
         self,
@@ -169,7 +220,7 @@ class LocalStorageService:
 
             final_filename = f"{evidence_id}.bin"
             final_path = os.path.join(case_dir, final_filename)
-            os.replace(temp_path, final_path)
+            self._promote_temp_to_final(temp_path, final_path)
 
             rel_path = f"{case_id}/{final_filename}"
             return rel_path, detected_mime, bytes_read, sha256
