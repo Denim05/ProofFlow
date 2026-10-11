@@ -123,7 +123,7 @@ export default function CasesDashboardPage() {
 
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-slate-800 transition shadow-xs"
           >
             <Plus className="w-4 h-4" />
             New Case
@@ -132,7 +132,7 @@ export default function CasesDashboardPage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200/90 shadow-sm">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs">
         {/* Search Input */}
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -141,7 +141,7 @@ export default function CasesDashboardPage() {
             placeholder="Search cases by title, narrative, or tag..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
           />
         </div>
 
@@ -155,7 +155,7 @@ export default function CasesDashboardPage() {
                 onClick={() => setSelectedStatus(statusKey)}
                 className={`px-3 py-1.5 rounded-lg border transition ${
                   selectedStatus === statusKey
-                    ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                    ? "bg-brand-600 text-white border-brand-600 shadow-xs"
                     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
@@ -217,7 +217,7 @@ export default function CasesDashboardPage() {
           {cases.length === 0 && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition"
+              className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-slate-800 transition shadow-xs"
             >
               <FolderPlus className="w-4 h-4" />
               Create First Case
@@ -234,13 +234,13 @@ export default function CasesDashboardPage() {
 
       {/* Create Case Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">Create New Incident Case</h3>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-medium"
+                className="text-slate-400 hover:text-slate-600 text-sm font-medium p-1 rounded-md"
               >
                 ✕
               </button>
@@ -263,7 +263,7 @@ export default function CasesDashboardPage() {
                   placeholder="e.g. Supply Chain Contract Breach — Vendor A"
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
                 />
               </div>
 
@@ -276,7 +276,7 @@ export default function CasesDashboardPage() {
                   placeholder="Provide background context on the incident or dispute..."
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
                 />
               </div>
 
@@ -289,7 +289,7 @@ export default function CasesDashboardPage() {
                   placeholder="contract, invoices, delay"
                   value={createTags}
                   onChange={(e) => setCreateTags(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
                 />
               </div>
 
@@ -304,7 +304,7 @@ export default function CasesDashboardPage() {
                 <button
                   type="submit"
                   disabled={creating || !createTitle.trim()}
-                  className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-sm disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-slate-800 rounded-lg transition shadow-xs disabled:opacity-50"
                 >
                   {creating ? "Creating..." : "Create Case"}
                 </button>

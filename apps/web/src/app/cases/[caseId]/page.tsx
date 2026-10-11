@@ -192,7 +192,7 @@ export default function CaseDetailsPage() {
 
               <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-brand-600" />
+                  <FileText className="w-3.5 h-3.5 text-slate-600" />
                   <span>{caseItem.evidence_count} Ingested Documents</span>
                 </div>
 
@@ -200,7 +200,7 @@ export default function CaseDetailsPage() {
                   type="button"
                   onClick={handleExportPdf}
                   disabled={exportingPdf}
-                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-slate-800 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
                 >
                   {exportingPdf ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -214,7 +214,7 @@ export default function CaseDetailsPage() {
                   type="button"
                   onClick={handleExportJson}
                   disabled={exportingJson}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition"
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs"
                 >
                   {exportingJson ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -251,7 +251,7 @@ export default function CaseDetailsPage() {
                 {caseItem.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-50 text-slate-600 border border-slate-200/70 px-2 py-0.5 rounded"
                   >
                     <Tag className="w-2.5 h-2.5 text-slate-400" />
                     {tag}
@@ -267,13 +267,13 @@ export default function CaseDetailsPage() {
               onClick={() => setActiveTab("EVIDENCE")}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
                 activeTab === "EVIDENCE"
-                  ? "border-brand-600 text-brand-600 bg-white rounded-t-lg"
+                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-slate-500" />
               <span>Evidence Ingestion</span>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
                 {evidenceList.length}
               </span>
             </button>
@@ -282,13 +282,13 @@ export default function CaseDetailsPage() {
               onClick={() => setActiveTab("TIMELINE")}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
                 activeTab === "TIMELINE"
-                  ? "border-brand-600 text-brand-600 bg-white rounded-t-lg"
+                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <Clock className="w-4 h-4" />
+              <Clock className="w-4 h-4 text-slate-500" />
               <span>Event Timeline</span>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-mono">
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
                 {events.length}
               </span>
             </button>
@@ -297,11 +297,11 @@ export default function CaseDetailsPage() {
               onClick={() => setActiveTab("CROSS_EXAM")}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
                 activeTab === "CROSS_EXAM"
-                  ? "border-brand-600 text-brand-600 bg-white rounded-t-lg"
+                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <GitCompare className="w-4 h-4" />
+              <GitCompare className="w-4 h-4 text-slate-500" />
               <span>Cross-Examination</span>
             </button>
           </div>

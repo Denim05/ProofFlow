@@ -16,6 +16,7 @@ import {
   Cpu,
   Eye,
   Download,
+  Loader2,
 } from "lucide-react";
 
 interface EvidenceListProps {
@@ -286,7 +287,7 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
                 <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center">
                   <button
                     onClick={() => handleOpenPreview(item)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs"
                     title="Preview evidence document"
                   >
                     <Eye className="w-3.5 h-3.5 text-slate-500" />
@@ -296,14 +297,14 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
                   <button
                     onClick={() => handleDownload(item)}
                     disabled={downloadingId === item.evidence_id}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition shadow-2xs disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs disabled:opacity-50"
                     title="Download evidence file"
                   >
-                    <Download
-                      className={`w-3.5 h-3.5 text-slate-500 ${
-                        downloadingId === item.evidence_id ? "animate-bounce" : ""
-                      }`}
-                    />
+                    {downloadingId === item.evidence_id ? (
+                      <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
+                    )}
                     <span>{downloadingId === item.evidence_id ? "Downloading..." : "Download"}</span>
                   </button>
 
@@ -311,7 +312,7 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
                     <button
                       onClick={() => handleRetry(item.evidence_id)}
                       disabled={isRetrying}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-md hover:bg-rose-100 transition disabled:opacity-50 shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-md hover:bg-rose-100 transition disabled:opacity-50 shadow-2xs"
                       title="Reprocess failed or interrupted evidence"
                     >
                       <RotateCcw

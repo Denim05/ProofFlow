@@ -16,10 +16,10 @@ export function CaseCard({ caseItem }: CaseCardProps) {
   });
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition group flex flex-col justify-between">
+    <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-xs hover:border-slate-300 hover:shadow-sm transition-all group flex flex-col justify-between">
       <div>
         <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="font-semibold text-slate-900 group-hover:text-brand-600 transition line-clamp-1 text-base">
+          <h3 className="font-semibold text-slate-900 group-hover:text-cyan-800 transition line-clamp-1 text-base">
             {caseItem.title}
           </h3>
           <StatusBadge status={caseItem.status} size="sm" />
@@ -34,7 +34,7 @@ export function CaseCard({ caseItem }: CaseCardProps) {
             {caseItem.tags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded"
+                className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-50 text-slate-600 border border-slate-200/70 px-2 py-0.5 rounded"
               >
                 <Tag className="w-2.5 h-2.5 text-slate-400" />
                 {tag}
@@ -50,7 +50,7 @@ export function CaseCard({ caseItem }: CaseCardProps) {
             <FileText className="w-3.5 h-3.5 text-slate-400" />
             {caseItem.evidence_count} {caseItem.evidence_count === 1 ? "document" : "documents"}
           </span>
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 font-mono text-[11px] text-slate-400">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             {formattedDate}
           </span>
@@ -58,7 +58,7 @@ export function CaseCard({ caseItem }: CaseCardProps) {
 
         <Link
           href={`/cases/${caseItem.case_id}`}
-          className="inline-flex items-center gap-1 font-semibold text-brand-600 group-hover:text-brand-700 hover:underline"
+          className="inline-flex items-center gap-1 font-semibold text-slate-900 group-hover:text-cyan-700 transition"
         >
           View Case
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />

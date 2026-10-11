@@ -114,7 +114,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Upload className="w-4 h-4 text-brand-600" />
+            <Upload className="w-4 h-4 text-slate-700" />
             Ingest Documentary Evidence
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -131,7 +131,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
         onClick={() => !isUploading && fileInputRef.current?.click()}
         className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center ${
           isDragging
-            ? "border-brand-500 bg-brand-50/50"
+            ? "border-cyan-500 bg-cyan-50/40"
             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
         } ${isUploading ? "opacity-60 cursor-not-allowed" : ""}`}
       >
@@ -148,7 +148,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
           disabled={isUploading}
         />
 
-        <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mb-2">
+        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center mb-2">
           <FileUp className="w-5 h-5" />
         </div>
 
@@ -164,7 +164,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
       {selectedFile && (
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded bg-brand-100 text-brand-700 font-semibold text-xs flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded bg-slate-100 text-slate-800 border border-slate-200 font-semibold text-xs flex items-center justify-center shrink-0">
               {selectedFile.name.split(".").pop()?.toUpperCase() || "DOC"}
             </div>
             <div className="min-w-0">
@@ -196,7 +196,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
               type="button"
               onClick={handleUpload}
               disabled={isUploading}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition shadow-sm disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-slate-800 rounded-md transition shadow-sm disabled:opacity-50"
             >
               {isUploading ? "Uploading..." : "Start Ingestion"}
             </button>
@@ -213,7 +213,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
           </div>
           <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-brand-600 transition-all duration-200 rounded-full"
+              className="h-full bg-cyan-600 transition-all duration-200 rounded-full"
               style={{ width: `${uploadProgress}%` }}
             ></div>
           </div>

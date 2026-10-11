@@ -231,7 +231,7 @@ export function EventTimeline({
               id="source-evidence-filter"
               value={selectedEvidenceId}
               onChange={(e) => setSelectedEvidenceId(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
             >
               <option value="ALL">All Evidence Assets ({evidenceList.length})</option>
               {evidenceList.map((evi) => (
@@ -254,7 +254,7 @@ export function EventTimeline({
               id="validation-state-filter"
               value={selectedDecisionState}
               onChange={(e) => setSelectedDecisionState(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
             >
               <option value="ALL">All Decision States</option>
               <option value="VALIDATED">Validated</option>
@@ -274,7 +274,7 @@ export function EventTimeline({
               id="event-type-filter"
               value={selectedEventType}
               onChange={(e) => setSelectedEventType(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
             >
               <option value="ALL">All Event Types</option>
               {availableEventTypes.map((type) => (
@@ -301,7 +301,7 @@ export function EventTimeline({
                 placeholder="Actor, order, snippet..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 transition"
               />
             </div>
           </div>
@@ -377,11 +377,11 @@ export function EventTimeline({
                   className={`absolute -left-6 sm:-left-8 top-4 w-3.5 h-3.5 rounded-full border-2 bg-white ${
                     isReviewNeeded
                       ? "border-amber-500 group-hover:bg-amber-100"
-                      : "border-brand-600 group-hover:bg-brand-100"
-                  } transition`}
+                      : "border-cyan-600 group-hover:bg-cyan-100"
+                  } transition shadow-2xs`}
                 />
 
-                <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm space-y-3.5 hover:border-slate-300 transition">
+                <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-xs space-y-3.5 hover:border-slate-300 transition">
                   {/* Header: Event Type, Date, Decision State */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -402,7 +402,7 @@ export function EventTimeline({
                         {isReviewNeeded ? "Review Needed" : "Validated"}
                       </span>
 
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-[10px] uppercase font-mono tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200/60">
                         {event.polarity} • {event.modality}
                       </span>
                     </div>
@@ -424,16 +424,16 @@ export function EventTimeline({
 
                       <span className="text-slate-300">|</span>
 
-                      <span className="text-[11px] text-slate-400" title="Ingestion timestamp">
+                      <span className="text-[11px] text-slate-400 font-mono" title="Ingestion timestamp">
                         Ingested: {extractionDate}
                       </span>
                     </div>
                   </div>
 
                   {/* Grounded Trigger Text Provenance */}
-                  <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="font-semibold text-slate-500 uppercase tracking-wider">
+                  <div className="bg-slate-50/80 border-l-2 border-l-cyan-600 border-y border-r border-slate-200/80 rounded-r-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <span className="font-semibold text-slate-600 uppercase tracking-wider font-sans">
                         Source Trigger Quote
                       </span>
                       <span>
@@ -448,7 +448,7 @@ export function EventTimeline({
                   {/* Grounded Arguments & Attributes */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                     {event.actor && (
-                      <div className="bg-slate-50/60 p-2 rounded border border-slate-100 flex items-center gap-1.5">
+                      <div className="bg-slate-50/70 p-2 rounded border border-slate-200/60 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="truncate text-slate-700 font-medium">
                           {event.actor}
@@ -457,7 +457,7 @@ export function EventTimeline({
                     )}
 
                     {event.amount_value !== null && event.amount_value !== undefined && (
-                      <div className="bg-slate-50/60 p-2 rounded border border-slate-100 flex items-center gap-1.5">
+                      <div className="bg-emerald-50/40 p-2 rounded border border-emerald-100 flex items-center gap-1.5">
                         <DollarSign className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span className="truncate text-emerald-800 font-semibold font-mono">
                           {formatCurrency(event.amount_value, event.amount_currency)}
@@ -466,7 +466,7 @@ export function EventTimeline({
                     )}
 
                     {event.order_reference && (
-                      <div className="bg-slate-50/60 p-2 rounded border border-slate-100 flex items-center gap-1.5">
+                      <div className="bg-slate-50/70 p-2 rounded border border-slate-200/60 flex items-center gap-1.5">
                         <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="truncate text-slate-700 font-mono font-medium">
                           {event.order_reference}
@@ -475,7 +475,7 @@ export function EventTimeline({
                     )}
 
                     {event.transaction_reference && (
-                      <div className="bg-slate-50/60 p-2 rounded border border-slate-100 flex items-center gap-1.5">
+                      <div className="bg-slate-50/70 p-2 rounded border border-slate-200/60 flex items-center gap-1.5">
                         <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="truncate text-slate-700 font-mono font-medium">
                           {event.transaction_reference}
@@ -486,8 +486,8 @@ export function EventTimeline({
 
                   {/* Review reasons notice */}
                   {isReviewNeeded && event.review_reasons.length > 0 && (
-                    <div className="text-[11px] text-amber-700 bg-amber-50/80 p-2 rounded border border-amber-200/80 flex items-center gap-1.5">
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <div className="text-[11px] text-amber-800 bg-amber-50/90 p-2.5 rounded-lg border border-amber-200 flex items-center gap-1.5 font-medium">
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>Flagged for review: {event.review_reasons.join(", ")}</span>
                     </div>
                   )}
@@ -495,16 +495,16 @@ export function EventTimeline({
                   {/* Provenance Footer: Source document & Model Confidence */}
                   <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500">
                     <div className="flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-brand-600" />
+                      <FileText className="w-3.5 h-3.5 text-slate-600" />
                       <span className="font-semibold text-slate-700 truncate max-w-xs">
                         {sourceFilename}
                       </span>
                       {event.page_number && (
-                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600">
+                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 font-mono">
                           Page {event.page_number}
                         </span>
                       )}
-                      <span className="font-mono text-[10px] text-slate-400">
+                      <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                         v{event.processing_version}
                       </span>
                     </div>

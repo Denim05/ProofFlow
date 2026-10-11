@@ -164,7 +164,7 @@ export function EvidencePreviewModal({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/70">
           <div className="flex items-center gap-3 min-w-0 mr-3">
-            <div className="p-2 bg-brand-50 text-brand-600 rounded-lg shrink-0">
+            <div className="p-2 bg-slate-100 text-slate-700 border border-slate-200/80 rounded-lg shrink-0">
               {isImage ? <ImageIcon className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
@@ -192,7 +192,7 @@ export function EvidencePreviewModal({
                 href={blobUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition shadow-sm"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition shadow-2xs"
                 title="Open in new tab"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -203,7 +203,7 @@ export function EvidencePreviewModal({
             <button
               onClick={handleDownloadClick}
               disabled={isDownloading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-lg hover:bg-brand-100 transition shadow-sm disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-slate-800 rounded-lg transition shadow-xs disabled:opacity-50"
               title="Download original evidence file"
             >
               {isDownloading ? (

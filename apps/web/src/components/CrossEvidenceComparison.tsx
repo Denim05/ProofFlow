@@ -461,8 +461,8 @@ export function CrossEvidenceComparison({
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-slate-200/90 p-12 text-center shadow-sm">
-          <Loader2 className="w-8 h-8 animate-spin text-brand-600 mx-auto mb-3" />
+        <div className="bg-white rounded-xl border border-slate-200/90 p-12 text-center shadow-xs">
+          <Loader2 className="w-8 h-8 animate-spin text-cyan-600 mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-800">
             Running Reasoning Engine...
           </p>
@@ -680,7 +680,7 @@ export function CrossEvidenceComparison({
                             </div>
                           </div>
 
-                          <blockquote className="text-slate-700 italic border-l-2 border-brand-400 pl-2 leading-relaxed">
+                          <blockquote className="text-slate-800 italic border-l-2 border-cyan-500 pl-2.5 leading-relaxed font-serif text-xs">
                             &ldquo;{cite.trigger_raw_text}&rdquo;
                           </blockquote>
                         </div>
@@ -697,7 +697,7 @@ export function CrossEvidenceComparison({
                         onClick={() =>
                           isAdjudicating ? handleCancelReview(finding.finding_id) : handleStartReview(finding)
                         }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-slate-800 transition shadow-xs"
                       >
                         <UserCheck className="w-3.5 h-3.5" />
                         {isAdjudicating
@@ -858,7 +858,7 @@ export function CrossEvidenceComparison({
                             ? "Explain why this finding is dismissed (e.g. 'Partial settlement confirmed via banking portal')..."
                             : "Optional rationale or operational notes for the audit trail..."
                         }
-                        className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 leading-relaxed text-slate-800 placeholder:text-slate-400"
+                        className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-600 leading-relaxed text-slate-800 placeholder:text-slate-400 transition"
                       />
                     </div>
 
@@ -914,14 +914,14 @@ export function CrossEvidenceComparison({
                         <button
                           type="button"
                           onClick={() => handleRequestConfirm(finding.finding_id)}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition"
+                          className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-brand-600 text-white hover:bg-slate-800 transition shadow-xs"
                         >
                           Review & Confirm
                         </button>
                         <button
                           type="button"
                           onClick={() => handleCancelReview(finding.finding_id)}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+                          className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
                         >
                           Cancel
                         </button>
