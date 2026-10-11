@@ -25,6 +25,7 @@ class EvidenceUploadResponse(BaseModel):
     )
     status: EvidenceStatus
     is_duplicate: bool = False
+    file_restored: bool = False
     created_at: datetime
 
 

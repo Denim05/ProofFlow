@@ -129,4 +129,37 @@ describe("EvidenceUploader", () => {
       expect(screen.getByText(/An identical file \(duplicate.pdf\) already exists/i)).toBeInTheDocument();
     });
   });
+
+  it("displays restored notice when backend returns is_duplicate: true and file_restored: true", async () => {
+    const mockRestored = {
+      evidence_id: "evi_restored",
+      case_id: "case_123",
+      original_filename: "proofflow-test.txt.pdf",
+      media_type: "application/pdf",
+      file_size_bytes: 2048,
+      sha256_hash: "c".repeat(64),
+      status: "READY" as const,
+      is_duplicate: true,
+      file_restored: true,
+      created_at: new Date().toISOString(),
+    };
+
+    (api.uploadEvidence as any).mockResolvedValue(mockRestored);
+
+    render(<EvidenceUploader caseId="case_123" onUploadSuccess={() => {}} />);
+
+    const validFile = new File(["pdf binary"], "proofflow-test.txt.pdf", {
+      type: "application/pdf",
+    });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [validFile] } });
+
+    fireEvent.click(screen.getByRole("button", { name: /start ingestion/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Physical evidence file \(proofflow-test.txt.pdf\) was restored/i)
+      ).toBeInTheDocument();
+    });
+  });
 });

@@ -86,7 +86,9 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
 
       if (response.is_duplicate) {
         setDuplicateNotice(
-          `Notice: An identical file (${response.original_filename}) already exists in this case. Retained existing record.`
+          response.file_restored
+            ? `Notice: Physical evidence file (${response.original_filename}) was restored for the existing record.`
+            : `Notice: An identical file (${response.original_filename}) already exists in this case. Retained existing record.`
         );
       }
 

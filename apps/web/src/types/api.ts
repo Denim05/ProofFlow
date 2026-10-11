@@ -63,6 +63,7 @@ export interface EvidenceUploadResponse {
   sha256_hash: string;
   status: EvidenceStatus;
   is_duplicate: boolean;
+  file_restored?: boolean;
   created_at: string;
 }
 

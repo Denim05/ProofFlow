@@ -1,4 +1,5 @@
 import math
+import os
 import re
 from typing import Optional
 from urllib.parse import quote
@@ -85,8 +86,74 @@ async def upload_evidence(
         {"case_id": case_id, "user_id": user_id, "sha256_hash": sha256_hash}
     )
     if existing:
-        # File already uploaded to this case; delete redundant file and return existing record
-        storage_service.remove_evidence_file(rel_path)
+        existing_rel_path = existing.get("storage_relative_path")
+        file_present = False
+        if existing_rel_path:
+            try:
+                full_existing_path = storage_service._resolve_safe_path(existing_rel_path)
+                file_present = os.path.exists(full_existing_path)
+            except Exception:
+                file_present = False
+
+        file_restored = False
+        if file_present:
+            # File already safely on disk; delete redundant file and return existing record
+            storage_service.remove_evidence_file(rel_path)
+        else:
+            # Physical file is missing from disk (e.g. Render Free redeployment / ephemeral disk reset).
+            # Safely restore the physical file by promoting the verified upload into the existing record's path.
+            target_rel_path = existing_rel_path or f"{case_id}/{existing['evidence_id']}.bin"
+            full_target_path = storage_service._resolve_safe_path(target_rel_path)
+            full_new_path = storage_service._resolve_safe_path(rel_path)
+            os.makedirs(os.path.dirname(full_target_path), exist_ok=True)
+            os.replace(full_new_path, full_target_path)
+            file_restored = True
+
+            await db.evidence.update_one(
+                {"evidence_id": existing["evidence_id"]},
+                {
+                    "$set": {
+                        "storage_relative_path": target_rel_path,
+                        "updated_at": utc_now(),
+                    }
+                },
+            )
+
+            # If existing evidence was previously FAILED or INTERRUPTED, re-dispatch extraction
+            if existing.get("status") in [
+                EvidenceStatus.FAILED.value,
+                EvidenceStatus.INTERRUPTED.value,
+            ]:
+                claimed = await db.evidence.find_one_and_update(
+                    {
+                        "evidence_id": existing["evidence_id"],
+                        "status": existing["status"],
+                    },
+                    {
+                        "$set": {
+                            "status": EvidenceStatus.QUEUED.value,
+                            "error_code": None,
+                            "error_message": None,
+                            "updated_at": utc_now(),
+                        },
+                        "$inc": {"retry_count": 1},
+                    },
+                    return_document=True,
+                )
+                if claimed:
+                    existing["status"] = EvidenceStatus.QUEUED.value
+                    job = ProcessingJob(
+                        evidence_id=claimed["evidence_id"],
+                        case_id=claimed["case_id"],
+                        user_id=claimed["user_id"],
+                        storage_relative_path=target_rel_path,
+                        original_filename=claimed["original_filename"],
+                        media_type=claimed["media_type"],
+                        sha256_hash=claimed["sha256_hash"],
+                        retry_count=claimed.get("retry_count", 1),
+                    )
+                    background_tasks.add_task(evidence_processing_service.run_job, job, db)
+
         upload_data = EvidenceUploadResponse(
             evidence_id=existing["evidence_id"],
             case_id=existing["case_id"],
@@ -96,6 +163,7 @@ async def upload_evidence(
             sha256_hash=existing["sha256_hash"],
             status=existing["status"],
             is_duplicate=True,
+            file_restored=file_restored,
             created_at=existing["created_at"],
         )
         return APIResponse(data=upload_data)
@@ -119,17 +187,36 @@ async def upload_evidence(
         # Determine if error is a duplicate key race on (case_id, sha256_hash)
         is_dup_race = "duplicate key" in str(exc).lower() or getattr(exc, "code", None) == 11000
 
-        # Protect against orphaned evidence files: remove uploaded file if no other record references it
-        other_ref = await db.evidence.find_one({"storage_relative_path": rel_path})
-        if not other_ref:
-            storage_service.remove_evidence_file(rel_path)
-
         if is_dup_race:
             # Deterministic resolution: return existing winner document
             winner = await db.evidence.find_one(
                 {"case_id": case_id, "user_id": user_id, "sha256_hash": sha256_hash}
             )
             if winner:
+                winner_rel_path = winner.get("storage_relative_path")
+                file_present = False
+                if winner_rel_path:
+                    try:
+                        full_winner_path = storage_service._resolve_safe_path(winner_rel_path)
+                        file_present = os.path.exists(full_winner_path)
+                    except Exception:
+                        file_present = False
+
+                file_restored = False
+                if file_present:
+                    storage_service.remove_evidence_file(rel_path)
+                else:
+                    target_rel_path = winner_rel_path or f"{case_id}/{winner['evidence_id']}.bin"
+                    full_target_path = storage_service._resolve_safe_path(target_rel_path)
+                    full_new_path = storage_service._resolve_safe_path(rel_path)
+                    os.makedirs(os.path.dirname(full_target_path), exist_ok=True)
+                    os.replace(full_new_path, full_target_path)
+                    file_restored = True
+                    await db.evidence.update_one(
+                        {"evidence_id": winner["evidence_id"]},
+                        {"$set": {"storage_relative_path": target_rel_path, "updated_at": utc_now()}},
+                    )
+
                 upload_data = EvidenceUploadResponse(
                     evidence_id=winner["evidence_id"],
                     case_id=winner["case_id"],
@@ -139,9 +226,16 @@ async def upload_evidence(
                     sha256_hash=winner["sha256_hash"],
                     status=winner["status"],
                     is_duplicate=True,
+                    file_restored=file_restored,
                     created_at=winner["created_at"],
                 )
                 return APIResponse(data=upload_data)
+
+        # Protect against orphaned evidence files on non-race insertion errors
+        other_ref = await db.evidence.find_one({"storage_relative_path": rel_path})
+        if not other_ref:
+            storage_service.remove_evidence_file(rel_path)
+
         raise exc
 
     # Transition parent case to PROCESSING upon evidence upload
