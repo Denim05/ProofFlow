@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { EvidenceResponse, EvidenceStatus } from "@/types/api";
 import { api, ApiError } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EvidencePreviewModal } from "@/components/EvidencePreviewModal";
 import {
   FileText,
   RefreshCw,
@@ -13,6 +14,8 @@ import {
   Copy,
   Check,
   Cpu,
+  Eye,
+  Download,
 } from "lucide-react";
 
 interface EvidenceListProps {
@@ -39,6 +42,9 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const [previewEvidence, setPreviewEvidence] = useState<EvidenceResponse | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
 
@@ -103,6 +109,40 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
       }
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleOpenPreview = (item: EvidenceResponse) => {
+    setPreviewEvidence(item);
+    setIsPreviewOpen(true);
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setPreviewEvidence(null);
+  };
+
+  const handleDownload = async (item: EvidenceResponse) => {
+    setDownloadingId(item.evidence_id);
+    setError(null);
+    try {
+      const blob = await api.downloadEvidence(caseId, item.evidence_id, false);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = item.original_filename || `evidence_${item.evidence_id}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setError(`Download failed: ${err.message}`);
+      } else {
+        setError("Failed to download evidence file.");
+      }
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -243,12 +283,35 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center">
+                  <button
+                    onClick={() => handleOpenPreview(item)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition shadow-2xs"
+                    title="Preview evidence document"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Preview</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDownload(item)}
+                    disabled={downloadingId === item.evidence_id}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition shadow-2xs disabled:opacity-50"
+                    title="Download evidence file"
+                  >
+                    <Download
+                      className={`w-3.5 h-3.5 text-slate-500 ${
+                        downloadingId === item.evidence_id ? "animate-bounce" : ""
+                      }`}
+                    />
+                    <span>{downloadingId === item.evidence_id ? "Downloading..." : "Download"}</span>
+                  </button>
+
                   {canRetry && (
                     <button
                       onClick={() => handleRetry(item.evidence_id)}
                       disabled={isRetrying}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-md hover:bg-rose-100 transition disabled:opacity-50"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-md hover:bg-rose-100 transition disabled:opacity-50 shadow-2xs"
                       title="Reprocess failed or interrupted evidence"
                     >
                       <RotateCcw
@@ -263,6 +326,15 @@ export function EvidenceList({ caseId, refreshTrigger }: EvidenceListProps) {
           })}
         </div>
       )}
+
+      {/* Authenticated Evidence Preview Modal */}
+      <EvidencePreviewModal
+        isOpen={isPreviewOpen}
+        onClose={handleClosePreview}
+        caseId={caseId}
+        evidence={previewEvidence}
+        onDownload={handleDownload}
+      />
     </div>
   );
 }

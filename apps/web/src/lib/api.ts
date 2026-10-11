@@ -423,6 +423,26 @@ export const api = {
     );
   },
 
+  async downloadEvidence(
+    caseId: string,
+    evidenceId: string,
+    inline: boolean = false
+  ): Promise<Blob> {
+    return requestBlob(
+      `/api/v1/cases/${caseId}/evidence/${evidenceId}/download`,
+      { params: inline ? { inline: "true" } : undefined }
+    );
+  },
+
+  async previewEvidence(
+    caseId: string,
+    evidenceId: string
+  ): Promise<Blob> {
+    return requestBlob(
+      `/api/v1/cases/${caseId}/evidence/${evidenceId}/preview`
+    );
+  },
+
   // Event & Timeline Management
   async listCaseEvents(
     caseId: string,

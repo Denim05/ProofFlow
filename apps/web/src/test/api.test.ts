@@ -372,4 +372,47 @@ describe("ProofFlow API Client", () => {
     expect(blob.type).toBe("application/pdf");
     expect(calls[0].url).toContain("/api/v1/cases/case_1/export/pdf");
   });
+
+  it("streams evidence blob for inline preview with Clerk session token", async () => {
+    const mockBlob = new Blob(["%PDF-1.4 evidence"], { type: "application/pdf" });
+    const calls: Array<{ url: string; headers: Headers }> = [];
+    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      calls.push({ url, headers: init?.headers as Headers });
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({
+          "content-type": "application/pdf",
+          "content-disposition": 'inline; filename="contract.pdf"',
+        }),
+        blob: () => Promise.resolve(mockBlob),
+      });
+    });
+
+    const blob = await api.previewEvidence("case_1", "evi_123");
+    expect(blob).toBeDefined();
+    expect(blob.type).toBe("application/pdf");
+    expect(calls[0].url).toContain("/api/v1/cases/case_1/evidence/evi_123/preview");
+    expect(calls[0].headers.get("Authorization")).toBe(`Bearer ${TEST_TOKEN}`);
+  });
+
+  it("downloads evidence blob with attachment disposition and auth", async () => {
+    const mockBlob = new Blob(["binary-data"], { type: "application/octet-stream" });
+    const calls: Array<{ url: string; headers: Headers }> = [];
+    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      calls.push({ url, headers: init?.headers as Headers });
+      return Promise.resolve({
+        ok: true,
+        headers: new Headers({
+          "content-type": "application/octet-stream",
+          "content-disposition": 'attachment; filename="data.bin"',
+        }),
+        blob: () => Promise.resolve(mockBlob),
+      });
+    });
+
+    const blob = await api.downloadEvidence("case_1", "evi_456");
+    expect(blob).toBeDefined();
+    expect(calls[0].url).toContain("/api/v1/cases/case_1/evidence/evi_456/download");
+    expect(calls[0].headers.get("Authorization")).toBe(`Bearer ${TEST_TOKEN}`);
+  });
 });

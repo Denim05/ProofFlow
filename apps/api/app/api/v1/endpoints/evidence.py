@@ -1,11 +1,14 @@
 import math
+import re
 from typing import Optional
+from urllib.parse import quote
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -307,3 +310,100 @@ async def retry_evidence_processing(
     background_tasks.add_task(evidence_processing_service.run_job, job, db)
 
     return APIResponse(data=EvidenceResponse(**claimed))
+
+
+@router.get("/{evidence_id}/download")
+async def download_evidence(
+    case_id: str,
+    evidence_id: str,
+    inline: bool = Query(
+        False,
+        description="Whether to serve file inline for in-browser preview or as attachment for download",
+    ),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncDatabase = Depends(get_db),
+):
+    """Securely streams binary evidence content with strict authentication and case ownership verification.
+
+    Sets RFC-compliant Content-Disposition (inline for preview, attachment for download)
+    and validates path security against directory traversal. Handles ephemeral file disappearance
+    gracefully on Render Free deployments.
+    """
+    await _verify_case_ownership(case_id, user_id, db)
+
+    row = await db.evidence.find_one(
+        {"evidence_id": evidence_id, "case_id": case_id, "user_id": user_id}
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evidence '{evidence_id}' was not found in case '{case_id}'",
+        )
+
+    storage_relative_path = row.get("storage_relative_path")
+    if not storage_relative_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Storage path record for evidence '{evidence_id}' is missing.",
+        )
+
+    # Strictly verify storage path belongs to the requested case
+    if not storage_relative_path.startswith(f"{case_id}/"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Evidence storage path does not belong to the requested case.",
+        )
+
+    try:
+        content = storage_service.read_evidence_bytes(storage_relative_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Evidence file is not available on disk. On Render Free hosting, local storage "
+                "is ephemeral and cleared on container restarts. Please re-upload this evidence "
+                "file to view or process it."
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read evidence file: {exc}",
+        )
+
+    media_type = row.get("media_type") or "application/octet-stream"
+    orig_filename = row.get("original_filename") or f"{evidence_id}.bin"
+
+    # RFC 6266 / RFC 5987 safe filename encoding
+    ascii_clean = re.sub(r'[\r\n"\\;]', "_", orig_filename).strip()
+    ascii_clean = ascii_clean.encode("ascii", "replace").decode("ascii") or "evidence"
+    encoded_filename = quote(orig_filename)
+
+    disposition_type = "inline" if inline else "attachment"
+    content_disposition = (
+        f'{disposition_type}; filename="{ascii_clean}"; filename*=UTF-8\'\'{encoded_filename}'
+    )
+
+    headers = {
+        "Content-Disposition": content_disposition,
+        "Content-Type": media_type,
+        "Content-Length": str(len(content)),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+    }
+
+    return Response(content=content, media_type=media_type, headers=headers)
+
+
+@router.get("/{evidence_id}/preview")
+async def preview_evidence(
+    case_id: str,
+    evidence_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncDatabase = Depends(get_db),
+):
+    """Convenience alias for inline evidence preview."""
+    return await download_evidence(case_id, evidence_id, inline=True, user_id=user_id, db=db)
