@@ -15,6 +15,7 @@ import { EvidenceUploader } from "@/components/EvidenceUploader";
 import { EvidenceList } from "@/components/EvidenceList";
 import { EventTimeline } from "@/components/EventTimeline";
 import { CrossEvidenceComparison } from "@/components/CrossEvidenceComparison";
+import { EvidenceGraph3D } from "@/components/EvidenceGraph3D";
 import {
   ArrowLeft,
   FileText,
@@ -27,6 +28,8 @@ import {
   FileJson,
   Loader2,
   Check,
+  Share2,
+  Sparkles,
 } from "lucide-react";
 
 export default function CaseDetailsPage() {
@@ -40,8 +43,8 @@ export default function CaseDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Tab State
-  const [activeTab, setActiveTab] = useState<"EVIDENCE" | "TIMELINE" | "CROSS_EXAM">("EVIDENCE");
+  // Tab State: Includes the new interactive 3D topology tab
+  const [activeTab, setActiveTab] = useState<"EVIDENCE" | "TIMELINE" | "CROSS_EXAM" | "NETWORK">("EVIDENCE");
 
   // Export State
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -149,50 +152,53 @@ export default function CaseDetailsPage() {
     <div className="space-y-6">
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-cyan-300 transition font-mono"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to Incident Cases
       </Link>
 
       {loading && !caseItem ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-8 animate-pulse space-y-4">
-          <div className="h-6 bg-slate-200 rounded w-1/3"></div>
-          <div className="h-4 bg-slate-100 rounded w-2/3"></div>
+        <div className="glass-panel rounded-2xl p-8 animate-pulse space-y-4 border border-slate-800">
+          <div className="h-6 bg-slate-800 rounded w-1/3"></div>
+          <div className="h-4 bg-slate-800/60 rounded w-2/3"></div>
         </div>
       ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+        <div className="bg-rose-950/40 border border-rose-500/40 text-rose-200 p-6 rounded-2xl flex items-start gap-3 backdrop-blur-xs">
+          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-semibold text-sm">Error Loading Case</h3>
-            <p className="text-sm text-rose-700 mt-1">{error}</p>
+            <h3 className="font-semibold text-sm text-white">Error Loading Case</h3>
+            <p className="text-sm text-rose-300 mt-1">{error}</p>
           </div>
         </div>
       ) : caseItem ? (
         <div className="space-y-6">
           {/* Case Header Card */}
-          <div className="bg-white rounded-xl border border-slate-200/90 p-6 shadow-sm space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl space-y-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-32 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
               <div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#00F2FE]" />
+                  <h1 className="text-2xl font-bold text-white tracking-tight">
                     {caseItem.title}
                   </h1>
                   <StatusBadge status={caseItem.status} />
                 </div>
                 <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5 font-mono">
                   <span>ID: {caseItem.case_id}</span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 font-sans">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-slate-700">•</span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
                     {formattedDate}
                   </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2.5 flex-wrap">
-                <div className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-slate-600" />
+                <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono text-cyan-300 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
                   <span>{caseItem.evidence_count} Ingested Documents</span>
                 </div>
 
@@ -200,12 +206,12 @@ export default function CaseDetailsPage() {
                   type="button"
                   onClick={handleExportPdf}
                   disabled={exportingPdf}
-                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-slate-800 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-300 text-slate-950 hover:brightness-110 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-neon-cyan"
                 >
                   {exportingPdf ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3.5 h-3.5 stroke-[2.5]" />
                   )}
                   <span>{exportingPdf ? "Generating PDF..." : "Export PDF Dossier"}</span>
                 </button>
@@ -214,12 +220,12 @@ export default function CaseDetailsPage() {
                   type="button"
                   onClick={handleExportJson}
                   disabled={exportingJson}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs"
+                  className="px-3.5 py-1.5 rounded-xl glass-panel text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-50 text-xs font-mono font-medium flex items-center gap-1.5 transition"
                 >
                   {exportingJson ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <FileJson className="w-3.5 h-3.5 text-slate-500" />
+                    <FileJson className="w-3.5 h-3.5 text-cyan-400" />
                   )}
                   <span>{exportingJson ? "Exporting JSON..." : "Export JSON"}</span>
                 </button>
@@ -227,21 +233,21 @@ export default function CaseDetailsPage() {
             </div>
 
             {exportSuccessMessage && (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 backdrop-blur-xs">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>{exportSuccessMessage}</span>
               </div>
             )}
 
             {exportErrorMessage && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2.5 rounded-lg text-xs font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <div className="bg-rose-950/40 border border-rose-500/40 text-rose-200 px-4 py-3 rounded-xl text-xs font-medium flex items-center gap-2 backdrop-blur-xs">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>{exportErrorMessage}</span>
               </div>
             )}
 
             {caseItem.description && (
-              <p className="text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+              <p className="text-sm text-slate-300 leading-relaxed border-t border-slate-800/80 pt-3">
                 {caseItem.description}
               </p>
             )}
@@ -251,9 +257,9 @@ export default function CaseDetailsPage() {
                 {caseItem.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium bg-slate-50 text-slate-600 border border-slate-200/70 px-2 py-0.5 rounded"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium bg-cyan-950/40 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-md backdrop-blur-xs font-mono"
                   >
-                    <Tag className="w-2.5 h-2.5 text-slate-400" />
+                    <Tag className="w-2.5 h-2.5 text-cyan-400" />
                     {tag}
                   </span>
                 ))}
@@ -262,47 +268,62 @@ export default function CaseDetailsPage() {
           </div>
 
           {/* Workspace Tabs Navigation */}
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-px">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-px overflow-x-auto">
             <button
               onClick={() => setActiveTab("EVIDENCE")}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px whitespace-nowrap ${
                 activeTab === "EVIDENCE"
-                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-cyan-400 text-white bg-slate-900/60 rounded-t-xl shadow-neon-cyan"
+                  : "border-transparent text-slate-400 hover:text-white"
               }`}
             >
-              <FileText className="w-4 h-4 text-slate-500" />
+              <FileText className="w-4 h-4 text-cyan-400" />
               <span>Evidence Ingestion</span>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-cyan-300 font-mono">
                 {evidenceList.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab("TIMELINE")}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px whitespace-nowrap ${
                 activeTab === "TIMELINE"
-                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-cyan-400 text-white bg-slate-900/60 rounded-t-xl shadow-neon-cyan"
+                  : "border-transparent text-slate-400 hover:text-white"
               }`}
             >
-              <Clock className="w-4 h-4 text-slate-500" />
+              <Clock className="w-4 h-4 text-cyan-400" />
               <span>Event Timeline</span>
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 font-mono">
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-cyan-300 font-mono">
                 {events.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab("CROSS_EXAM")}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px ${
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px whitespace-nowrap ${
                 activeTab === "CROSS_EXAM"
-                  ? "border-cyan-600 text-slate-900 bg-white rounded-t-lg shadow-2xs"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-cyan-400 text-white bg-slate-900/60 rounded-t-xl shadow-neon-cyan"
+                  : "border-transparent text-slate-400 hover:text-white"
               }`}
             >
-              <GitCompare className="w-4 h-4 text-slate-500" />
+              <GitCompare className="w-4 h-4 text-cyan-400" />
               <span>Cross-Examination</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("NETWORK")}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition -mb-px whitespace-nowrap ${
+                activeTab === "NETWORK"
+                  ? "border-cyan-400 text-white bg-slate-900/60 rounded-t-xl shadow-neon-cyan"
+                  : "border-transparent text-slate-400 hover:text-white"
+              }`}
+            >
+              <Share2 className="w-4 h-4 text-cyan-400" />
+              <span>3D Evidence Network</span>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-mono">
+                3D
+              </span>
             </button>
           </div>
 
@@ -341,8 +362,17 @@ export default function CaseDetailsPage() {
               evidenceList={evidenceList}
             />
           )}
+
+          {activeTab === "NETWORK" && (
+            <EvidenceGraph3D
+              caseTitle={caseItem.title}
+              evidenceList={evidenceList}
+              events={events}
+            />
+          )}
         </div>
       ) : null}
     </div>
   );
 }
+

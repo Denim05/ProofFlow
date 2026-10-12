@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.case import CaseResponse
 from app.schemas.review import FindingReviewResponse
@@ -38,6 +39,31 @@ class DossierEventItem(BaseModel):
     page_number: Optional[int] = None
     stated_event_date: Optional[str] = None
     document_upload_time: datetime
+
+    @field_validator("amount_value", mode="before")
+    @classmethod
+    def parse_amount_value(cls, v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        if hasattr(v, "to_decimal"):
+            v = v.to_decimal()
+        if isinstance(v, Decimal):
+            return float(v)
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            cleaned = v.strip()
+            if not cleaned or cleaned.lower() in ("none", "null"):
+                return None
+            try:
+                return float(cleaned)
+            except (ValueError, TypeError):
+                return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
 
 
 class DossierCitationItem(BaseModel):

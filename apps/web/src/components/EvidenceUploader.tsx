@@ -110,14 +110,14 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+    <div className="glass-panel rounded-2xl p-6 space-y-5 border border-slate-800 shadow-xl">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Upload className="w-4 h-4 text-slate-700" />
+          <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+            <Upload className="w-4 h-4 text-cyan-400" />
             Ingest Documentary Evidence
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-400 mt-1">
             Upload PDF contracts, emails, statements, or receipts (Max 25 MB).
           </p>
         </div>
@@ -129,10 +129,10 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center ${
+        className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all flex flex-col items-center justify-center relative overflow-hidden ${
           isDragging
-            ? "border-cyan-500 bg-cyan-50/40"
-            : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+            ? "border-cyan-400 bg-cyan-950/30 shadow-neon-cyan"
+            : "border-slate-800 bg-slate-900/40 hover:border-cyan-500/50 hover:bg-slate-900/70"
         } ${isUploading ? "opacity-60 cursor-not-allowed" : ""}`}
       >
         <input
@@ -148,30 +148,30 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
           disabled={isUploading}
         />
 
-        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center mb-2">
-          <FileUp className="w-5 h-5" />
+        <div className="w-12 h-12 rounded-xl bg-cyan-950/60 text-cyan-400 border border-cyan-500/30 flex items-center justify-center mb-3 shadow-neon-cyan">
+          <FileUp className="w-6 h-6" />
         </div>
 
-        <p className="text-sm font-semibold text-slate-800">
-          Click to upload <span className="font-normal text-slate-500">or drag and drop</span>
+        <p className="text-sm font-semibold text-white">
+          Click to upload <span className="font-normal text-slate-400">or drag and drop</span>
         </p>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-500 mt-1 font-mono">
           PDF, PNG, JPG, JPEG, or WEBP (up to 25 MB)
         </p>
       </div>
 
       {/* Selected File & Progress */}
       {selectedFile && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded bg-slate-100 text-slate-800 border border-slate-200 font-semibold text-xs flex items-center justify-center shrink-0">
+        <div className="glass-panel-elevated border border-slate-700/80 rounded-xl p-3.5 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-cyan-950/70 text-cyan-300 border border-cyan-500/40 font-mono font-bold text-xs flex items-center justify-center shrink-0">
               {selectedFile.name.split(".").pop()?.toUpperCase() || "DOC"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800 truncate">
+              <p className="text-xs font-semibold text-white truncate">
                 {selectedFile.name}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-400 font-mono">
                 {(selectedFile.size / 1024).toFixed(0)} KB
               </p>
             </div>
@@ -185,7 +185,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
                   setSelectedFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = "";
                 }}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition"
                 title="Remove selection"
               >
                 <X className="w-4 h-4" />
@@ -196,7 +196,7 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
               type="button"
               onClick={handleUpload}
               disabled={isUploading}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-slate-800 rounded-md transition shadow-sm disabled:opacity-50"
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:brightness-110 rounded-xl transition shadow-neon-cyan disabled:opacity-50"
             >
               {isUploading ? "Uploading..." : "Start Ingestion"}
             </button>
@@ -206,14 +206,14 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
 
       {/* Upload Progress Bar */}
       {isUploading && uploadProgress !== null && (
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-medium">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-cyan-300 font-mono font-medium">
             <span>Uploading to ProofFlow...</span>
             <span>{uploadProgress}%</span>
           </div>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
             <div
-              className="h-full bg-cyan-600 transition-all duration-200 rounded-full"
+              className="h-full bg-gradient-to-r from-cyan-400 to-cyan-300 transition-all duration-200 rounded-full shadow-[0_0_8px_#00F2FE]"
               style={{ width: `${uploadProgress}%` }}
             ></div>
           </div>
@@ -222,21 +222,21 @@ export function EvidenceUploader({ caseId, onUploadSuccess }: EvidenceUploaderPr
 
       {/* Duplicate Notice */}
       {duplicateNotice && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3.5 py-2.5 rounded-lg text-xs flex items-start gap-2">
-          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="bg-amber-950/40 border border-amber-500/40 text-amber-200 px-4 py-3 rounded-xl text-xs flex items-start gap-2.5 backdrop-blur-xs">
+          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <p>{duplicateNotice}</p>
         </div>
       )}
 
       {/* Error Banner */}
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-3.5 py-2.5 rounded-lg text-xs flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+        <div className="bg-rose-950/40 border border-rose-500/40 text-rose-200 px-4 py-3 rounded-xl text-xs flex items-start gap-2.5 backdrop-blur-xs">
+          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <p className="flex-1 font-medium">{error}</p>
           <button
             type="button"
             onClick={() => setError(null)}
-            className="text-rose-400 hover:text-rose-600"
+            className="text-rose-400 hover:text-white"
           >
             ✕
           </button>

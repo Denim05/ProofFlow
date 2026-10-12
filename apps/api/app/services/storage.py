@@ -237,10 +237,29 @@ class LocalStorageService:
                 except OSError:
                     pass
 
+    def file_exists(self, storage_relative_path: str) -> bool:
+        """Checks if the evidence file exists on disk, including workspace fallback."""
+        try:
+            full_path = self._resolve_safe_path(storage_relative_path)
+            if os.path.exists(full_path):
+                return True
+            alt_path = os.path.abspath(
+                os.path.join(self.storage_root, "..", "..", "storage", "evidence", storage_relative_path)
+            )
+            return os.path.exists(alt_path)
+        except Exception:
+            return False
+
     def read_evidence_bytes(self, storage_relative_path: str) -> bytes:
         """Safely reads raw binary content for processing."""
         full_path = self._resolve_safe_path(storage_relative_path)
         if not os.path.exists(full_path):
+            alt_path = os.path.abspath(
+                os.path.join(self.storage_root, "..", "..", "storage", "evidence", storage_relative_path)
+            )
+            if os.path.exists(alt_path):
+                with open(alt_path, "rb") as f:
+                    return f.read()
             raise FileNotFoundError(f"Evidence file not found: {storage_relative_path}")
         with open(full_path, "rb") as f:
             return f.read()

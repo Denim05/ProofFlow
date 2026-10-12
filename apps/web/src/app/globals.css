@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0b132b;
+  --background: #030712;
+  --foreground: #f8fafc;
 }
 
 body {
@@ -16,9 +16,65 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Glassmorphic Cyber Surfaces */
+.glass-panel {
+  background: rgba(8, 16, 38, 0.7);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+}
+
+.glass-panel-elevated {
+  background: rgba(12, 24, 56, 0.78);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 242, 254, 0.18);
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.6), 0 0 25px -4px rgba(6, 182, 212, 0.15);
+}
+
+.glass-panel-interactive {
+  background: rgba(8, 16, 38, 0.65);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-interactive:hover {
+  background: rgba(12, 24, 56, 0.85);
+  border-color: rgba(6, 182, 212, 0.35);
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 0 25px -4px rgba(6, 182, 212, 0.2);
+}
+
+/* Cyber Grid Background */
+.cyber-grid-bg {
+  background-size: 36px 36px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* 3D Perspective & Depth Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.translate-z-10 {
+  transform: translateZ(10px);
+}
+
+.translate-z-20 {
+  transform: translateZ(20px);
+}
+
 /* Accessible focus ring for keyboard navigation */
 :focus-visible {
-  outline: 2px solid #0891b2;
+  outline: 2px solid #00f2fe;
   outline-offset: 2px;
 }
 
@@ -34,21 +90,23 @@ body {
   }
 }
 
-/* Subtle, clean enterprise scrollbars */
+/* Sleek Cyber Obsidian Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #050b18;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #1e293b;
   border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #0891b2;
 }
+

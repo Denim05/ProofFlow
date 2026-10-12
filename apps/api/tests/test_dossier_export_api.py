@@ -356,3 +356,116 @@ async def test_export_all_decision_states_rendered_in_pdf_and_json(client: Async
     assert res_pdf.status_code == 200
     assert len(res_pdf.content) > 2000
 
+
+@pytest.mark.asyncio
+async def test_export_handles_decimal_amount_value(client: AsyncClient, fake_db: FakeAsyncDatabase):
+    """Regression test: Decimal('2499.00') and Decimal128 amounts in events serialize safely for PDF and JSON export."""
+    from decimal import Decimal
+    from bson.decimal128 import Decimal128
+
+    case_id = "case_decimal_test"
+    evi_id = "evi_decimal_test"
+    user_id = "user_decimal"
+
+    await fake_db.cases.insert_one({
+        "case_id": case_id,
+        "user_id": user_id,
+        "title": "Decimal Amount Dispute Case",
+        "description": "Verifying Decimal('2499.00') serialization in dossier export.",
+        "status": "READY",
+        "evidence_count": 1,
+        "created_at": datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 3, 1, 10, 5, 0, tzinfo=timezone.utc),
+    })
+
+    await fake_db.evidence.insert_one({
+        "evidence_id": evi_id,
+        "case_id": case_id,
+        "user_id": user_id,
+        "original_filename": "invoice_2499.pdf",
+        "media_type": "application/pdf",
+        "file_size_bytes": 12000,
+        "sha256_hash": "c" * 64,
+        "status": "READY",
+        "active_processing_version": 1,
+        "created_at": datetime(2026, 3, 1, 10, 1, 0, tzinfo=timezone.utc),
+    })
+
+    # Event 1: Decimal('2499.00')
+    await fake_db.events.insert_one({
+        "event_id": "evt_dec_1",
+        "case_id": case_id,
+        "evidence_id": evi_id,
+        "user_id": user_id,
+        "processing_version": 1,
+        "is_active": True,
+        "event_type": "INVOICE_ISSUED",
+        "decision_state": "VALIDATED",
+        "review_reasons": [],
+        "trigger_raw_text": "Invoice issued for total $2499.00.",
+        "char_start": 0,
+        "char_end": 35,
+        "order_reference": "INV-2499",
+        "amount_currency": "USD",
+        "amount_value": Decimal("2499.00"),
+        "polarity": "POSITIVE",
+        "created_at": datetime(2026, 3, 1, 10, 2, 0, tzinfo=timezone.utc),
+    })
+
+    # Event 2: Decimal128('2499.00')
+    await fake_db.events.insert_one({
+        "event_id": "evt_dec_2",
+        "case_id": case_id,
+        "evidence_id": evi_id,
+        "user_id": user_id,
+        "processing_version": 1,
+        "is_active": True,
+        "event_type": "PAYMENT_SETTLED",
+        "decision_state": "VALIDATED",
+        "review_reasons": [],
+        "trigger_raw_text": "Payment settled for total $2499.00.",
+        "char_start": 0,
+        "char_end": 35,
+        "order_reference": "SETTLE-2499",
+        "amount_currency": "USD",
+        "amount_value": Decimal128("2499.00"),
+        "polarity": "POSITIVE",
+        "created_at": datetime(2026, 3, 1, 10, 3, 0, tzinfo=timezone.utc),
+    })
+
+    # Event 3: None amount (safe missing amount handling)
+    await fake_db.events.insert_one({
+        "event_id": "evt_dec_3",
+        "case_id": case_id,
+        "evidence_id": evi_id,
+        "user_id": user_id,
+        "processing_version": 1,
+        "is_active": True,
+        "event_type": "DELIVERY_COMPLETED",
+        "decision_state": "VALIDATED",
+        "review_reasons": [],
+        "trigger_raw_text": "Delivery completed.",
+        "char_start": 0,
+        "char_end": 20,
+        "amount_value": None,
+        "polarity": "POSITIVE",
+        "created_at": datetime(2026, 3, 1, 10, 4, 0, tzinfo=timezone.utc),
+    })
+
+    # 1. Test JSON Export
+    res_json = await client.get(f"/api/v1/cases/{case_id}/export/json", headers={"X-User-ID": user_id})
+    assert res_json.status_code == 200
+    data = res_json.json()
+    assert len(data["events_timeline"]) == 3
+    events_by_id = {e["event_id"]: e for e in data["events_timeline"]}
+    assert events_by_id["evt_dec_1"]["amount_value"] == 2499.0
+    assert events_by_id["evt_dec_2"]["amount_value"] == 2499.0
+    assert events_by_id["evt_dec_3"]["amount_value"] is None
+
+    # 2. Test PDF Export
+    res_pdf = await client.get(f"/api/v1/cases/{case_id}/export/pdf", headers={"X-User-ID": user_id})
+    assert res_pdf.status_code == 200
+    assert res_pdf.content.startswith(b"%PDF-")
+    assert len(res_pdf.content) > 1000
+
+

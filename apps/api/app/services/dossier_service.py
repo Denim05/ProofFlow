@@ -2,6 +2,7 @@ import hashlib
 import io
 import math
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 import pymupdf
 from pymongo.asynchronous.database import AsyncDatabase
@@ -21,6 +22,30 @@ from app.schemas.dossier import (
 from app.schemas.finding import FindingResponse
 from app.schemas.review import FindingReviewResponse
 from app.services.finding_service import FindingService
+
+
+def serialize_dossier_amount(val: Any) -> Optional[float]:
+    """Converts Decimal, Decimal128, string, or numeric values to JSON-compatible float."""
+    if val is None:
+        return None
+    if hasattr(val, "to_decimal"):
+        val = val.to_decimal()
+    if isinstance(val, Decimal):
+        return float(val)
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        cleaned = val.strip()
+        if not cleaned or cleaned.lower() in ("none", "null"):
+            return None
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
 
 class DossierService:
@@ -92,7 +117,7 @@ class DossierService:
                     decision_state=ev.get("decision_state", "VALIDATED"),
                     order_reference=ev.get("order_reference"),
                     transaction_reference=ev.get("transaction_reference"),
-                    amount_value=ev.get("amount_value"),
+                    amount_value=serialize_dossier_amount(ev.get("amount_value")),
                     amount_currency=ev.get("amount_currency"),
                     polarity=ev.get("polarity", "POSITIVE"),
                     modality=ev.get("modality", "ASSERTED"),

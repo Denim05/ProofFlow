@@ -154,31 +154,31 @@ export function EvidencePreviewModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="preview-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="glass-panel-elevated rounded-2xl shadow-2xl border border-slate-700/80 w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 bg-slate-950/95"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/70">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
           <div className="flex items-center gap-3 min-w-0 mr-3">
-            <div className="p-2 bg-slate-100 text-slate-700 border border-slate-200/80 rounded-lg shrink-0">
+            <div className="p-2.5 bg-cyan-950/60 text-cyan-400 border border-cyan-500/30 rounded-xl shrink-0 shadow-neon-cyan">
               {isImage ? <ImageIcon className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h2
                   id="preview-modal-title"
-                  className="text-sm sm:text-base font-bold text-slate-900 truncate"
+                  className="text-sm sm:text-base font-bold text-white tracking-tight truncate"
                   title={evidence.original_filename}
                 >
                   {evidence.original_filename}
                 </h2>
                 <StatusBadge status={evidence.status} size="sm" />
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 font-mono">
+              <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 font-mono">
                 <span>{formatFileSize(evidence.file_size_bytes)}</span>
                 <span>•</span>
                 <span className="truncate">{evidence.media_type}</span>
@@ -186,16 +186,16 @@ export function EvidencePreviewModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
             {blobUrl && (
               <a
                 href={blobUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition shadow-2xs"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-slate-300 hover:text-white glass-panel rounded-xl hover:border-slate-600 transition"
                 title="Open in new tab"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
+                <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
                 <span>New Tab</span>
               </a>
             )}
@@ -203,7 +203,7 @@ export function EvidencePreviewModal({
             <button
               onClick={handleDownloadClick}
               disabled={isDownloading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-slate-800 rounded-lg transition shadow-xs disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:brightness-110 rounded-xl transition shadow-neon-cyan disabled:opacity-50"
               title="Download original evidence file"
             >
               {isDownloading ? (
@@ -217,7 +217,7 @@ export function EvidencePreviewModal({
             <button
               onClick={onClose}
               aria-label="Close preview"
-              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -225,14 +225,14 @@ export function EvidencePreviewModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 relative flex flex-col bg-slate-100/60 overflow-hidden">
+        <div className="flex-1 relative flex flex-col bg-slate-950/80 overflow-hidden">
           {loading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-xs text-center p-6">
-              <Loader2 className="w-9 h-9 animate-spin text-brand-600 mb-3" />
-              <p className="text-sm font-semibold text-slate-800">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-xs text-center p-6">
+              <Loader2 className="w-9 h-9 animate-spin text-cyan-400 mb-3" />
+              <p className="text-sm font-semibold text-white">
                 Loading secure evidence preview...
               </p>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm">
+              <p className="text-xs text-slate-400 mt-1 max-w-sm font-mono">
                 Authenticating session token and streaming encrypted file from storage.
               </p>
             </div>
@@ -240,30 +240,30 @@ export function EvidencePreviewModal({
 
           {error && !loading && (
             <div className="flex-1 flex items-center justify-center p-6">
-              <div className="max-w-md w-full bg-white rounded-xl border border-rose-200 p-6 text-center shadow-sm space-y-4">
-                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+              <div className="max-w-md w-full glass-panel-elevated rounded-2xl border border-rose-500/40 p-6 text-center shadow-xl space-y-4">
+                <div className="w-12 h-12 bg-rose-950/60 text-rose-400 border border-rose-500/30 rounded-xl flex items-center justify-center mx-auto">
                   <AlertCircle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-base font-bold text-white">
                     Unable to Preview Evidence
                   </h3>
-                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
                     {error}
                   </p>
                 </div>
                 <div className="flex items-center justify-center gap-3 pt-2">
                   <button
                     onClick={loadPreview}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-200 glass-panel hover:text-white rounded-xl transition"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
                     Try Again
                   </button>
                   <button
                     onClick={handleDownloadClick}
                     disabled={isDownloading}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:brightness-110 rounded-xl transition shadow-neon-cyan"
                   >
                     <Download className="w-3.5 h-3.5" />
                     Download File
@@ -284,31 +284,31 @@ export function EvidencePreviewModal({
               )}
 
               {isImage && (
-                <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-900/5 overflow-auto">
+                <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-950/60 overflow-auto">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={blobUrl}
                     alt={evidence.original_filename}
-                    className="max-h-[72vh] max-w-full object-contain rounded-lg shadow-md border border-slate-200/60 bg-white"
+                    className="max-h-[72vh] max-w-full object-contain rounded-xl shadow-2xl border border-slate-800 bg-slate-900"
                   />
                 </div>
               )}
 
               {!isPdf && !isImage && (
                 <div className="flex-1 flex items-center justify-center p-6 text-center">
-                  <div className="max-w-md bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
-                    <FileText className="w-10 h-10 text-slate-400 mx-auto" />
-                    <h3 className="text-sm font-bold text-slate-900">
+                  <div className="max-w-md glass-panel rounded-2xl border border-slate-800 p-6 shadow-xl space-y-3">
+                    <FileText className="w-10 h-10 text-slate-500 mx-auto" />
+                    <h3 className="text-sm font-bold text-white">
                       In-browser preview is not supported for this file type
                     </h3>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-400">
                       File format: <span className="font-mono">{evidence.media_type}</span>.
                       Please download the file to inspect its contents.
                     </p>
                     <div className="pt-2">
                       <button
                         onClick={handleDownloadClick}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition shadow-sm"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:brightness-110 rounded-xl transition shadow-neon-cyan"
                       >
                         <Download className="w-4 h-4" />
                         Download File

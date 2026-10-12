@@ -46,8 +46,18 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
+export function getApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+  if (configured) {
+    return configured;
+  }
+  // In production builds, never hardcode localhost or 127.0.0.1
+  if (process.env.NODE_ENV === "production") {
+    return "";
+  }
+  return "http://127.0.0.1:8000";
+}
+
 
 const DEV_USER_ID =
   process.env.NEXT_PUBLIC_DEV_USER_ID || "dev_user_default";
@@ -173,7 +183,8 @@ interface RequestOptions extends RequestInit {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, headers, skipAuth, ...restOptions } = options;
 
-  let url = `${API_BASE_URL}${endpoint}`;
+  const baseUrl = getApiBaseUrl();
+  let url = `${baseUrl}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -190,7 +201,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const requestHeaders = new Headers(headers);
 
   // Protected API requests require a Clerk session token (or explicit dev opt-in)
-  const isApiRequest = url.startsWith(API_BASE_URL);
+  const isApiRequest = url.startsWith(baseUrl);
   if (isApiRequest && !skipAuth && !requestHeaders.has("Authorization")) {
     const authHeaders = await resolveAuthHeaders();
     Object.entries(authHeaders).forEach(([key, value]) => requestHeaders.set(key, value));
@@ -248,7 +259,8 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 async function requestBlob(endpoint: string, options: RequestOptions = {}): Promise<Blob> {
   const { params, headers, skipAuth, ...restOptions } = options;
 
-  let url = `${API_BASE_URL}${endpoint}`;
+  const baseUrl = getApiBaseUrl();
+  let url = `${baseUrl}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -264,7 +276,7 @@ async function requestBlob(endpoint: string, options: RequestOptions = {}): Prom
 
   const requestHeaders = new Headers(headers);
 
-  const isApiRequest = url.startsWith(API_BASE_URL);
+  const isApiRequest = url.startsWith(baseUrl);
   if (isApiRequest && !skipAuth && !requestHeaders.has("Authorization")) {
     const authHeaders = await resolveAuthHeaders();
     Object.entries(authHeaders).forEach(([key, value]) => requestHeaders.set(key, value));
@@ -329,7 +341,8 @@ export const api = {
     const formData = new FormData();
     formData.append("file", file);
 
-    const url = `${API_BASE_URL}/api/v1/cases/${caseId}/evidence`;
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/api/v1/cases/${caseId}/evidence`;
 
     // If onProgress is supplied and XMLHttpRequest is available in browser
     if (onProgress && typeof XMLHttpRequest !== "undefined") {
